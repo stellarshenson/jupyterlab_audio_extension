@@ -55,8 +55,8 @@ artifacts = ["jupyterlab_voice_capture_extension/labextension"]
 exclude = [".github", "binder"]
 
 [tool.hatch.build.targets.wheel.shared-data]
-"jupyterlab_voice_capture_extension/labextension" = "share/jupyter/labextensions/jupyterlab_voice_capture_extension"
-"install.json" = "share/jupyter/labextensions/jupyterlab_voice_capture_extension/install.json"
+"jupyterlab_voice_capture_extension/labextension" = "share/jupyter/labextensions/@stellarshenson/jupyterlab-voice-capture-extension"
+"install.json" = "share/jupyter/labextensions/@stellarshenson/jupyterlab-voice-capture-extension/install.json"
 "jupyter-config/server-config" = "etc/jupyter/jupyter_server_config.d"
 
 [tool.hatch.build.hooks.version]

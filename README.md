@@ -1,7 +1,7 @@
 # jupyterlab_voice_capture_extension
 
 [![GitHub Actions](https://github.com/stellarshenson/jupyterlab_voice_capture_extension/actions/workflows/build.yml/badge.svg)](https://github.com/stellarshenson/jupyterlab_voice_capture_extension/actions/workflows/build.yml)
-[![npm version](https://img.shields.io/npm/v/jupyterlab_voice_capture_extension.svg)](https://www.npmjs.com/package/jupyterlab_voice_capture_extension)
+[![npm version](https://img.shields.io/npm/v/@stellarshenson/jupyterlab-voice-capture-extension.svg)](https://www.npmjs.com/package/@stellarshenson/jupyterlab-voice-capture-extension)
 [![PyPI version](https://img.shields.io/pypi/v/jupyterlab-voice-capture-extension.svg)](https://pypi.org/project/jupyterlab-voice-capture-extension/)
 [![Total PyPI downloads](https://static.pepy.tech/badge/jupyterlab-voice-capture-extension)](https://pepy.tech/project/jupyterlab-voice-capture-extension)
 [![JupyterLab 4](https://img.shields.io/badge/JupyterLab-4-orange.svg)](https://jupyterlab.readthedocs.io/en/stable/)

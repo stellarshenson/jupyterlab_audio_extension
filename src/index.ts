@@ -13,11 +13,11 @@ import { VoiceCapture } from './voice-capture';
 
 import { VoiceStatus } from './status';
 
-const PLUGIN_ID = 'jupyterlab_voice_capture_extension:plugin';
+const PLUGIN_ID = '@stellarshenson/jupyterlab-voice-capture-extension:plugin';
 const TOGGLE_COMMAND = 'voice-capture:toggle';
 
 /**
- * Initialization data for the jupyterlab_voice_capture_extension extension.
+ * Initialization data for the @stellarshenson/jupyterlab-voice-capture-extension extension.
  */
 const plugin: JupyterFrontEndPlugin<void> = {
   id: PLUGIN_ID,
@@ -32,7 +32,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
     settingRegistry: ISettingRegistry | null
   ) => {
     console.log(
-      'JupyterLab extension jupyterlab_voice_capture_extension is activated!'
+      'JupyterLab extension @stellarshenson/jupyterlab-voice-capture-extension is activated!'
     );
 
     const model = new VoiceCapture(app.serviceManager.serverSettings);

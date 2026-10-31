@@ -27,7 +27,7 @@ class VoiceCapture(Configurable):
 def _jupyter_labextension_paths():
     return [{
         "src": "labextension",
-        "dest": "jupyterlab_voice_capture_extension"
+        "dest": "@stellarshenson/jupyterlab-voice-capture-extension"
     }]
 
 
