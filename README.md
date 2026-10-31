@@ -25,7 +25,7 @@ Chain: browser mic → AudioWorklet (16 kHz mono s16le) → websocket → server
 
 ## Requirements
 
-- JupyterLab >= 4.0.0
+- JupyterLab >= 4.6.0
 - A secure context (https or `localhost`) - browsers only expose the microphone over a secure origin
 
 ## Install

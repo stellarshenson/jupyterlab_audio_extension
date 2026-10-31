@@ -7,3 +7,4 @@ jupyterlab_voice_capture_extension
 eslint.config.mjs
 .venv
 .claude
+.agents

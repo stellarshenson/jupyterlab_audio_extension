@@ -137,3 +137,6 @@ junit.xml
 # uv lockfile (not used - project builds via hatchling/jlpm)
 uv.lock
 tmp/
+
+# Run output
+logs/
