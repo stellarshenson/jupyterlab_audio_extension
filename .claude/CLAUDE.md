@@ -44,7 +44,7 @@ source. The contract between the two halves is `docs/acc-crit-voice-capture.md`.
 
 **Conventions**:
 - Generated from the `jupyterlab/extension-template` copier template (v4.6.0); `.copier-answers.yml` is machine-managed, NEVER edit manually
-- Python package and npm package share the name `jupyterlab_voice_capture_extension`
+- Python package on PyPI: `jupyterlab_voice_capture_extension`; npm package: `@stellarshenson/jupyterlab-voice-capture-extension`
 - Build/install/test go through the `Makefile` targets, not raw `jlpm`/`pip` commands
 
 ## Project Standards (Reinforced)
