@@ -1,4 +1,11 @@
-import { floatToS16LE, Framer, FRAME_BYTES, FRAME_SAMPLES } from '../pcm';
+import {
+  floatToS16LE,
+  Framer,
+  FRAME_BYTES,
+  FRAME_SAMPLES,
+  s16leStereoToFloat32,
+  SpeakerRing
+} from '../pcm';
 
 describe('floatToS16LE', () => {
   it('maps full scale to the int16 range, little-endian (B2)', () => {
@@ -38,5 +45,98 @@ describe('Framer', () => {
     frames.forEach(f => expect(f.byteLength).toBe(FRAME_BYTES));
     // the 5 leftover samples are buffered; one more near-frame completes it
     expect(framer.push(new Float32Array(FRAME_SAMPLES - 5))).toHaveLength(1);
+  });
+});
+
+describe('s16leStereoToFloat32', () => {
+  it('splits interleaved s16le stereo into channels scaled to [-1, 1)', () => {
+    // two frames, little-endian: (L 0x7FFF, R 0x8000), (L 0x4000, R 0xC000)
+    const pcm = Uint8Array.from([
+      0xff, 0x7f, 0x00, 0x80, 0x00, 0x40, 0x00, 0xc0
+    ]);
+    const [left, right] = s16leStereoToFloat32(pcm.buffer);
+    expect(Array.from(left)).toEqual([32767 / 32768, 0.5]);
+    expect(Array.from(right)).toEqual([-1, -0.5]);
+  });
+});
+
+describe('SpeakerRing', () => {
+  // prebuffer 4 frames, capacity 8 frames, render quantum 2 frames
+  const pull = (ring: SpeakerRing): number[][] => {
+    const left = new Float32Array(2).fill(9);
+    const right = new Float32Array(2).fill(9);
+    ring.pull(left, right);
+    return [Array.from(left), Array.from(right)];
+  };
+  const push = (ring: SpeakerRing, values: number[]): void =>
+    ring.push(
+      Float32Array.from(values),
+      Float32Array.from(values.map(v => -v))
+    );
+
+  it('stays silent until the prebuffer is full, then plays in order', () => {
+    const ring = new SpeakerRing(4, 8);
+    push(ring, [1, 2, 3]);
+    expect(pull(ring)).toEqual([
+      [0, 0],
+      [0, 0]
+    ]);
+    push(ring, [4]);
+    expect(pull(ring)).toEqual([
+      [1, 2],
+      [-1, -2]
+    ]);
+    expect(pull(ring)).toEqual([
+      [3, 4],
+      [-3, -4]
+    ]);
+  });
+
+  it('outputs silence on an underrun and prebuffers again before playing', () => {
+    const ring = new SpeakerRing(4, 8);
+    push(ring, [1, 2, 3, 4, 5]);
+    pull(ring);
+    pull(ring);
+    expect(pull(ring)).toEqual([
+      [0, 0],
+      [0, 0]
+    ]); // one frame left: underrun
+    push(ring, [6, 7]);
+    expect(pull(ring)).toEqual([
+      [0, 0],
+      [0, 0]
+    ]); // three frames queued, below the prebuffer
+    push(ring, [8]);
+    expect(pull(ring)).toEqual([
+      [5, 6],
+      [-5, -6]
+    ]);
+  });
+
+  it('keeps at most its capacity by dropping the oldest frames', () => {
+    const ring = new SpeakerRing(4, 8);
+    push(ring, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    expect([pull(ring), pull(ring), pull(ring), pull(ring)]).toEqual([
+      [
+        [3, 4],
+        [-3, -4]
+      ],
+      [
+        [5, 6],
+        [-5, -6]
+      ],
+      [
+        [7, 8],
+        [-7, -8]
+      ],
+      [
+        [9, 10],
+        [-9, -10]
+      ]
+    ]);
+    expect(pull(ring)).toEqual([
+      [0, 0],
+      [0, 0]
+    ]);
   });
 });

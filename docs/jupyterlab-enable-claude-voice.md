@@ -56,7 +56,7 @@ The extension ships an operator CLI that performs and verifies all the plumbing 
 # one-time: install stack + provision /run/voice + write client.conf + the Jupyter config line (does NOT start the daemon)
 jupyterlab_voice_capture install
 
-# start the daemon + source (detached); run this after install and after every restart
+# start the daemon + source + speaker sink (detached); run this after install and after every restart
 jupyterlab_voice_capture start -d
 
 # check every component and print how to fix whatever is missing
@@ -66,8 +66,8 @@ jupyterlab_voice_capture validate
 jupyterlab_voice_capture stop
 ```
 
-- `install` - one-time provisioning (detailed below); installs via apt only, creates the lab-owned `/run/voice` dir, and writes both config files; **does not start the daemon** - it ends by telling you to run `start`
-- `start` - starts the daemon + loads + defaults the `voicein` source (step 4 below), which creates the FIFO; `-d`/`--detached` returns immediately; run it after `install` and after every container restart
+- `install` - one-time provisioning (detailed below); installs via apt only, creates the lab-owned `/run/voice` dir, and writes both config files; **does not start the daemon**
+- `start` - starts the daemon + loads + defaults the `voicein` source (step 4 below), which creates the FIFO, and the `voiceout` sink (see Speaker); `-d`/`--detached` returns immediately; run it after `install` and after every container restart
 - `validate` - checks every component, prints fixes plus the `c.VoiceCapture.sink_path` line and the `AUDIODRIVER=pulseaudio` export; the `voicein` source reads green only when its FIFO exists and is a real FIFO; exits `0` when all present, `1` when anything is missing; add `--json` for a machine-readable report (no colour)
 - `stop` - kills the userspace daemon (`pulseaudio --kill`)
 - `--sink-path PATH` - overrides the FIFO path on `install`/`validate`/`start` (default `/run/voice/pulseaudio.fifo`)
@@ -83,7 +83,7 @@ Output is coloured only for status - green OK, red missing, yellow warning - and
 - **writes `client.conf`** - appends `default-server = unix:/tmp/pulse-lab/native` to `/etc/pulse/client.conf` if absent, so env-less clients (Claude's `rec`) find the daemon
 - **writes the Jupyter config line** - checks `~/.jupyter/jupyter_server_config.py` and, if no `c.VoiceCapture.sink_path` is set, appends `c.VoiceCapture.sink_path = "<sink>"` (restart the server to apply)
 
-It ends by telling you to run `start -d`. The only thing it leaves to the operator is `AUDIODRIVER=pulseaudio` in the shell that launches `claude` - that must live in the claude process itself. Run `validate` afterwards to confirm.
+When no step failed, it ends by telling you to run `start -d`; otherwise it prints `install failed` and exits 1. The only thing it leaves to the operator is `AUDIODRIVER=pulseaudio` in the shell that launches `claude` - that must live in the claude process itself. Run `validate` afterwards to confirm.
 
 ## Prerequisites
 
@@ -174,6 +174,17 @@ sox /tmp/t.wav -n stat 2>&1 | grep -iE 'Maximum amplitude|RMS'
 - speak at normal-to-firm volume - RMS < 0.01 transcribes poorly
 - setting **Auto-connect on startup** (`autoConnect`, Settings → Voice Capture) starts capture as JupyterLab loads; off by default
 
+## Speaker
+
+Every open JupyterLab browser tab is also the container's speaker. Playback is always on, with no on/off control and no setting. Sound plays as soon as it arrives in a browser that allows sound without a gesture (Chrome with the autoplay policy no-user-gesture-required), and in any browser after any click or key press anywhere in the tab, panels and frames included. In a browser that blocks autoplay, a tab nobody has clicked or typed in since it loaded may stay silent; sound sent more than 0.5 s before the first click or key press is dropped.
+
+- `start` also loads `module-pipe-sink` `voiceout` with `file=<directory of the sink path>/speaker.fifo format=s16le rate=48000 channels=2 use_system_clock_for_timing=yes`, sets it as the default sink, moves the `voicein` loopback back to `voicedrain`, and loads `module-suspend-on-idle`, so `voiceout` writes nothing from about 5 s after the last sound
+- the server extension reads `speaker.fifo` (default `/run/voice/speaker.fifo`) and sends the audio to every open JupyterLab tab over `…/jupyterlab-voice-capture-extension/speaker`; opening another tab stops none of them
+- test: click once in the tab, then run `paplay <file>` in a terminal (wav or mp3); the sound plays in the tab
+- verify: `validate` reports the speaker FIFO, `voiceout` loaded and `voiceout` as the default sink; `pactl info | grep 'Default Sink'` shows `voiceout`
+- play, pause, resume, stop and clear through one command: `voice-capture:player` takes `{action, mode?, path?}`; `play` with a `path` relative to the Jupyter root queues an mp3 or wav file and starts it when nothing plays, `mode: "now"` starts it at once, mixed with every file already playing, `pause` and `resume` stop and continue every playing file at its position, `stop` ends every playing file and keeps the queue (the queue does not advance until the next play or resume), `clear` removes the queue, and `status` reports the state; a missing or undecodable file, a path outside the root or an unknown action is refused with the reason and changes nothing; the palette entry **Stop All Audio** in category **Voice Capture** runs `{"action": "stop"}`; from a terminal: `jupyterlab-commands execute voice-capture:player --args '{"action": "play", "path": "<file>"}'`, which runs only after `voice-capture:player` is added to the `allowedCommands` setting of `@stellarshenson/jupyterlab-commands-extension:plugin`
+- microphone on and off: the commands `voice-capture:enable` (label **Enable Voice Capture**) and `voice-capture:disable` (label **Disable Voice Capture**) start capture in the tab that runs `voice-capture:enable` and stop capture in every open tab, for terminal programs such as Claude Code `/voice`; `voice-capture:enable` returns once capture streams, fails with the error message (for example `Microphone permission denied.`) when capture turns to Error, and does nothing when capture already streams; `voice-capture:disable` does nothing when capture is already off; from a terminal: `jupyterlab-commands execute voice-capture:enable`, which, like `voice-capture:player`, runs only after the command is added to the `allowedCommands` setting
+
 ## Durability
 
 Runtime state is live-only: the daemon, the FIFO, the `/run/voice` dir, the packages. The `client.conf` and Jupyter config lines persist (they live on disk), the daemon is a process and `/run` can be tmpfs, so treat all of these as lost at boot; where `/run` persists, `start` removes the FIFO the killed daemon left behind. Persist with a start hook that each boot:
@@ -205,4 +216,4 @@ Runtime state is live-only: the daemon, the FIFO, the `/run/voice` dir, the pack
 - Claude's `rec` reaches pulse via `/etc/pulse/client.conf` (no `/mnt/wslg/PulseServer` symlink required); the only blocker was the missing `AUDIODRIVER`
 - diagnose the recorder with `strace -f -e trace=execve,connect -p <claude-pid>` while running `/voice` - the decisive lines are `execve("/usr/bin/rec", ["rec","--version"])` and its exit code
 - the pulse default source must be `voicein`; SoX with `AUDIODRIVER=pulseaudio` records the default source
-- everything downstream of the FIFO is container plumbing; the extension's responsibility ends at delivering correct PCM to the FIFO
+- capture: everything downstream of the FIFO is container plumbing, and the extension's responsibility ends at delivering correct PCM to the FIFO; playback: PulseAudio writes `speaker.fifo`, and the extension's responsibility begins at reading it or playing the file that `voice-capture:player` names

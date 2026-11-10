@@ -1,6 +1,9 @@
-"""Scope limits (acceptance group F): the server extension starts no processes, drives no
-audio tool and does no speech-to-text. The operator CLI (cli.py) is a separate tool that
-manages PulseAudio on purpose, so it is exempt."""
+"""Scope limits (acceptance group F): the server extension starts no process except the
+virtual player's playback client, drives no audio tool, and does no speech-to-text. The
+operator CLI (cli.py) is a separate tool that manages PulseAudio on purpose, so it is
+exempt. ACC-SCOPE-25 is amended for the player: the extension may play audio files through
+PulseAudio, and still never starts, stops or configures the daemon, never records and never
+transcribes."""
 
 import ast
 import pathlib
@@ -8,8 +11,11 @@ import re
 
 PACKAGE = pathlib.Path(__file__).resolve().parent.parent
 EXTENSION_MODULES = sorted(p for p in PACKAGE.glob("*.py") if p.name != "cli.py")
-AUDIO_TOOLS = re.compile(r"\b(pactl|pacmd|sox|rec|parec|arecord)\b")
+AUDIO_TOOLS = re.compile(r"\b(pactl|pacmd|sox|rec|parec|arecord|paplay)\b")
 SPEECH_TO_TEXT = {"whisper", "faster_whisper", "vosk", "speech_recognition", "deepgram"}
+# The player spawns paplay, its playback client; no other module may start a process or
+# name an audio tool.
+PLAYBACK_MODULE = "player.py"
 
 
 def _trees():
@@ -31,9 +37,11 @@ def test_scan_covers_the_server_modules():
 
 
 def test_extension_starts_no_processes():
-    # F1/F2: no subprocess import, no os.system / os.exec* / os.spawn* / os.popen call.
+    # F1/F2: no subprocess import outside the player, no os.system / os.exec* / os.spawn* /
+    # os.popen call anywhere.
     for name, tree in _trees():
-        assert "subprocess" not in _imported(tree), name
+        if name != PLAYBACK_MODULE:
+            assert "subprocess" not in _imported(tree), name
         for node in ast.walk(tree):
             if (
                 isinstance(node, ast.Attribute)
@@ -56,13 +64,15 @@ def test_extension_names_no_audio_tool():
             and isinstance(node.body[0], ast.Expr)
             and isinstance(node.body[0].value, ast.Constant)
         }
+        allowed = {"paplay"} if name == PLAYBACK_MODULE else set()
         for node in ast.walk(tree):
             if (
                 isinstance(node, ast.Constant)
                 and isinstance(node.value, str)
                 and id(node) not in docstrings
             ):
-                assert not AUDIO_TOOLS.search(node.value), f"{name}: {node.value!r}"
+                found = set(AUDIO_TOOLS.findall(node.value))
+                assert not (found - allowed), f"{name}: {node.value!r}"
 
 
 def test_extension_imports_no_speech_to_text():

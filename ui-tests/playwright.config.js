@@ -25,17 +25,21 @@ module.exports = {
     ...baseConfig.use,
     baseURL: BASE_URL,
     launchOptions: {
-      // A fake microphone, granted without a prompt.
+      // A fake microphone, granted without a prompt. --disable-audio-output: the test browser
+      // opens no PulseAudio stream (--mute-audio still opens one), so its tone never reaches a
+      // daemon that client.conf names, such as a live lab whose default sink plays in a tab.
       args: [
         '--use-fake-ui-for-media-stream',
-        '--use-fake-device-for-media-stream'
+        '--use-fake-device-for-media-stream',
+        '--disable-audio-output'
       ]
     }
   },
   webServer: {
     command: 'jlpm start',
     url: `${BASE_URL}/lab`,
-    timeout: 120 * 1000,
+    // On a loaded host the server took over 120 s to start: conda info, run as it loads, is slow.
+    timeout: 360 * 1000,
     // Never adopt a server this suite did not start: it would drive a real session.
     reuseExistingServer: false
   }

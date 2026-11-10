@@ -9,7 +9,8 @@ Commands:
   install   - install packages, provision the lab-owned FIFO directory, write the PulseAudio
               client config and the extension's sink_path; does not start the daemon
   start     - start the userspace PulseAudio daemon and load the pipe-source (which creates
-              the FIFO) as the default source
+              the FIFO) as the default source and the pipe-sink (which creates the speaker
+              FIFO) as the default sink
   stop      - kill the userspace PulseAudio daemon
   validate  - check every component is in place and print how to configure what is missing,
               including the AUDIODRIVER=pulseaudio setting the claude process needs
@@ -25,8 +26,13 @@ import stat
 import subprocess
 import sys
 
+from .speaker import SPEAKER_FIFO_NAME
+
 DEFAULT_SINK_PATH = "/run/voice/pulseaudio.fifo"
 SOURCE_NAME = "voicein"
+SPEAKER_SINK_NAME = "voiceout"
+SPEAKER_RATE = 48000
+SPEAKER_CHANNELS = 2
 PULSE_RUNTIME_PATH = "/tmp/pulse-lab"
 PULSE_SOCKET = f"{PULSE_RUNTIME_PATH}/native"
 PULSE_CLIENT_CONF = "/etc/pulse/client.conf"
@@ -111,6 +117,19 @@ def _sox_has_pulse() -> bool:
     return "pulseaudio" in (res.stdout + res.stderr).lower()
 
 
+def _package_checks() -> list:
+    return [
+        ("pulseaudio on PATH", shutil.which("pulseaudio") is not None,
+         "apt install pulseaudio"),
+        ("pactl on PATH", shutil.which("pactl") is not None,
+         "apt install pulseaudio-utils"),
+        ("sox / rec on PATH", shutil.which("rec") is not None,
+         "apt install sox"),
+        ("sox pulseaudio driver", _sox_has_pulse(),
+         "apt install libsox-fmt-pulse"),
+    ]
+
+
 def _client_conf_has_default_server() -> bool:
     try:
         with open(PULSE_CLIENT_CONF, encoding="utf-8") as handle:
@@ -142,8 +161,19 @@ def _source_loaded() -> bool:
     return SOURCE_NAME in sources
 
 
+def _sink_loaded() -> bool:
+    _, sinks = _pactl("list", "short", "sinks")
+    return SPEAKER_SINK_NAME in sinks
+
+
+def _suspend_on_idle_loaded() -> bool:
+    _, modules = _pactl("list", "short", "modules")
+    return "module-suspend-on-idle" in modules
+
+
 def _start_pulse_and_source(sink: str, dry: bool) -> None:
-    """Start the userspace PulseAudio daemon (if needed) and expose the pipe-source."""
+    """Start the userspace PulseAudio daemon (if needed) and expose the pipe-source and the
+    pipe-sink."""
     if not dry and _daemon_running():
         print("  PulseAudio already running")
     else:
@@ -188,6 +218,38 @@ def _start_pulse_and_source(sink: str, dry: bool) -> None:
             dry=dry,
         )
     _run(["pactl", "set-default-source", SOURCE_NAME], dry=dry)
+    speaker = os.path.join(os.path.dirname(sink), SPEAKER_FIFO_NAME)
+    if not dry and _sink_loaded():
+        print(f"  sink '{SPEAKER_SINK_NAME}' already loaded")
+    else:
+        # module-pipe-sink reuses an existing FIFO but on unload removes only one it created.
+        if _is_fifo(speaker):
+            _run(["rm", "-f", speaker], dry=dry)
+        _run(
+            [
+                "pactl",
+                "load-module",
+                "module-pipe-sink",
+                f"sink_name={SPEAKER_SINK_NAME}",
+                f"file={speaker}",
+                f"format={SAMPLE_FORMAT}",
+                f"rate={SPEAKER_RATE}",
+                f"channels={SPEAKER_CHANNELS}",
+                "use_system_clock_for_timing=yes",
+            ],
+            dry=dry,
+        )
+    _run(["pactl", "set-default-sink", SPEAKER_SINK_NAME], dry=dry)
+    # A new default sink also takes the voicein loopback off voicedrain, which would play the
+    # microphone in the tab and keep voiceout from going idle; move it back.
+    if not dry:
+        _, inputs = _pactl("list", "short", "sink-inputs")
+        for ln in inputs.splitlines():
+            if "module-loopback.c" in ln:
+                _run(["pactl", "move-sink-input", ln.split()[0], "voicedrain"])
+    # An idle sink is suspended after 5 s, so the pipe-sink writes nothing while nothing plays.
+    if dry or not _suspend_on_idle_loaded():
+        _run(["pactl", "load-module", "module-suspend-on-idle"], dry=dry)
 
 
 def _stop_daemon() -> int:
@@ -197,9 +259,10 @@ def _stop_daemon() -> int:
 # --------------------------------------------------------------------------- install
 
 
-def _install_packages(dry: bool) -> None:
+def _install_packages(dry: bool) -> bool:
     """Install the audio stack via apt (``apt-get update`` + ``install``), using sudo when
-    not already root.
+    not already root. Returns True when an apt-get command failed, or when apt-get is
+    missing and a package is not installed.
 
     conda is intentionally not used: the conda-forge ``sox`` build ships without the
     pulseaudio I/O driver, so a sox that can record from pulse must come from the Debian
@@ -208,20 +271,24 @@ def _install_packages(dry: bool) -> None:
     straight through to the user's terminal.
     """
     if not dry and shutil.which("apt-get") is None:
+        if all(ok for _label, ok, _fix in _package_checks()):
+            print("  apt-get not found - every package is already installed")
+            return False
         print("  apt-get not found - install these with your platform's package manager:")
         print(f"    {' '.join(APT_PACKAGES)}")
         print("    (sox must include the pulseaudio driver; Debian: libsox-fmt-pulse)")
-        return
+        return True
 
     need_sudo = os.geteuid() != 0
     if need_sudo and not dry:
         print("  apt needs root - sudo will prompt for your password")
-    _run(["apt-get", "update"], dry=dry, sudo=need_sudo)
+    failed = _run(["apt-get", "update"], dry=dry, sudo=need_sudo) != 0
     rc = _run(["apt-get", "install", "-y", *APT_PACKAGES], dry=dry, sudo=need_sudo)
     if not dry and rc != 0:
         print("  apt install failed - install these another way:")
         print(f"    {' '.join(APT_PACKAGES)}")
         print("    (sox must include the pulseaudio driver; Debian: libsox-fmt-pulse)")
+    return failed or rc != 0
 
 
 def cmd_install(args) -> int:
@@ -235,21 +302,21 @@ def cmd_install(args) -> int:
         print(_c("DRY RUN - nothing will be executed.", "yellow") + "\n")
 
     print("1) Install packages")
-    _install_packages(dry)
+    failed = _install_packages(dry)
 
     print(f"\n2) Provision runtime dir {sink_dir}")
     if os.path.isdir(sink_dir):
         print(f"  {sink_dir} already exists - leaving ownership unchanged")
     else:
-        _run(
+        failed |= _run(
             ["install", "-d", "-m", "0755", "-o", user, "-g", user, sink_dir],
             dry=dry,
             sudo=True,
-        )
+        ) != 0
 
     print(f"\n3) Make the daemon discoverable in {PULSE_CLIENT_CONF}")
     line = f"default-server = unix:{PULSE_SOCKET}"
-    _run(
+    failed |= _run(
         [
             "sh",
             "-c",
@@ -258,11 +325,15 @@ def cmd_install(args) -> int:
         ],
         dry=dry,
         sudo=True,
-    )
+    ) != 0
 
     cfg = _jupyter_server_config()
     print(f"\n4) Point the extension at the sink in {cfg}")
     _write_sink_config(cfg, sink, dry)
+
+    if failed:
+        print("\n" + _c("install failed - fix the errors above and run install again.", "red"))
+        return 1
 
     print("\nDone. install does not start the daemon. Next steps:\n")
     print("  1) start the bridge (also re-run after every container restart):")
@@ -283,27 +354,26 @@ def cmd_install(args) -> int:
 def cmd_validate(args) -> int:
     sink = args.sink_path
     sink_dir = os.path.dirname(sink) or "/"
+    speaker = os.path.join(os.path.dirname(sink), SPEAKER_FIFO_NAME)
     rc_info, info = _pactl("info")
     _, sources = _pactl("list", "short", "sources")
+    _, sinks = _pactl("list", "short", "sinks")
 
     default_source = ""
+    default_sink = ""
     for ln in info.splitlines():
         if ln.startswith("Default Source:"):
             default_source = ln.split(":", 1)[1].strip()
+        if ln.startswith("Default Sink:"):
+            default_sink = ln.split(":", 1)[1].strip()
 
     # The source is only functionally connected when its backing FIFO is a real FIFO; a
     # loaded module against a missing or non-FIFO path must never read green.
     fifo_ok = _is_fifo(sink)
+    speaker_ok = _is_fifo(speaker)
 
     checks = [
-        ("pulseaudio on PATH", shutil.which("pulseaudio") is not None,
-         "apt install pulseaudio"),
-        ("pactl on PATH", shutil.which("pactl") is not None,
-         "apt install pulseaudio-utils"),
-        ("sox / rec on PATH", shutil.which("rec") is not None,
-         "apt install sox"),
-        ("sox pulseaudio driver", _sox_has_pulse(),
-         "apt install libsox-fmt-pulse"),
+        *_package_checks(),
         (f"runtime dir {sink_dir}", os.path.isdir(sink_dir),
          f"sudo install -d -m 0755 -o $(id -un) -g $(id -gn) {sink_dir}"),
         (f"FIFO {sink}", fifo_ok,
@@ -314,6 +384,12 @@ def cmd_validate(args) -> int:
          "jupyterlab_voice_capture start"),
         (f"default source is '{SOURCE_NAME}'", default_source == SOURCE_NAME and fifo_ok,
          f"jupyterlab_voice_capture start  (or: pactl set-default-source {SOURCE_NAME})"),
+        (f"speaker FIFO {speaker}", speaker_ok,
+         "created by module-pipe-sink: jupyterlab_voice_capture start"),
+        (f"sink '{SPEAKER_SINK_NAME}' connected", (SPEAKER_SINK_NAME in sinks) and speaker_ok,
+         "jupyterlab_voice_capture start"),
+        (f"default sink is '{SPEAKER_SINK_NAME}'", default_sink == SPEAKER_SINK_NAME and speaker_ok,
+         f"jupyterlab_voice_capture start  (or: pactl set-default-sink {SPEAKER_SINK_NAME})"),
         ("default-server in client.conf", _client_conf_has_default_server(),
          f'echo "default-server = unix:{PULSE_SOCKET}" | sudo tee -a {PULSE_CLIENT_CONF}'),
         ("AUDIODRIVER=pulseaudio in this env", os.environ.get("AUDIODRIVER") == "pulseaudio",
@@ -373,10 +449,10 @@ def cmd_start(args) -> int:
     sink = args.sink_path
     print(f"Starting PulseAudio voice bridge (source '{SOURCE_NAME}' -> {sink})")
     _start_pulse_and_source(sink, dry=False)
-    if not _daemon_running() or not _source_loaded():
+    if not _daemon_running() or not _source_loaded() or not _sink_loaded():
         print(
-            f"Failed to start the PulseAudio daemon or load source '{SOURCE_NAME}' - "
-            "run: jupyterlab_voice_capture validate"
+            f"Failed to start the PulseAudio daemon or load source '{SOURCE_NAME}' "
+            f"or sink '{SPEAKER_SINK_NAME}' - run: jupyterlab_voice_capture validate"
         )
         return 1
     if args.detached:
@@ -445,15 +521,39 @@ def _write_sink_config(cfg: str, sink: str, dry: bool) -> None:
 
 
 def main(argv=None) -> int:
+    raw = argparse.RawDescriptionHelpFormatter
     parser = argparse.ArgumentParser(
         prog="jupyterlab_voice_capture",
-        description="Provision and verify the voice-capture container plumbing "
+        description="Provision and verify the voice-capture container plumbing\n"
         "(PulseAudio + SoX bridge for the FIFO the extension writes).",
+        epilog="exit codes:\n"
+        "  0  success\n"
+        "  1  validate found a missing component, start did not load voicein or voiceout,\n"
+        "     stop failed, or a command that install runs failed, or install found a\n"
+        "     required package missing and no apt-get on PATH\n"
+        "  2  unknown command or flag\n"
+        "\n"
+        "environment:\n"
+        "  NO_COLOR, TERM  no status colour when NO_COLOR is set, TERM is dumb or the output\n"
+        "                  is not a terminal\n"
+        "  AUDIODRIVER     validate checks that it is pulseaudio",
+        formatter_class=raw,
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_install = sub.add_parser(
-        "install", help="install and configure the audio plumbing"
+        "install",
+        help="install and configure the audio plumbing",
+        description="Install pulseaudio, pulseaudio-utils, sox and libsox-fmt-pulse with apt-get\n"
+        "(through sudo when not root, which asks for a password), create the directory of\n"
+        "--sink-path, and add default-server to /etc/pulse/client.conf and\n"
+        "c.VoiceCapture.sink_path to ~/.jupyter/jupyter_server_config.py where missing.\n"
+        "Does not start the daemon. Prints each command it runs, then the next steps when no\n"
+        "step failed.",
+        epilog="examples:\n"
+        "  jupyterlab_voice_capture install --dry-run\n"
+        "  jupyterlab_voice_capture install",
+        formatter_class=raw,
     )
     p_install.add_argument(
         "--sink-path", default=DEFAULT_SINK_PATH, help="FIFO path (default: %(default)s)"
@@ -464,7 +564,18 @@ def main(argv=None) -> int:
     p_install.set_defaults(func=cmd_install)
 
     p_validate = sub.add_parser(
-        "validate", help="verify components and print how to configure them"
+        "validate",
+        help="verify components and print how to configure them",
+        description="Check every component of the audio bridge and change nothing: the programs, the\n"
+        "directory and FIFO of --sink-path, the microphone source voicein, the speaker FIFO\n"
+        "and sink voiceout, the default source and sink, default-server in\n"
+        "/etc/pulse/client.conf and AUDIODRIVER=pulseaudio in this environment. Prints\n"
+        "[ OK ] or [MISS] per check, how to fix each missing one and the\n"
+        "c.VoiceCapture.sink_path line. Exits 1 when a component is missing.",
+        epilog="examples:\n"
+        "  jupyterlab_voice_capture validate\n"
+        "  jupyterlab_voice_capture validate --json",
+        formatter_class=raw,
     )
     p_validate.add_argument(
         "--sink-path", default=DEFAULT_SINK_PATH, help="FIFO path (default: %(default)s)"
@@ -475,7 +586,18 @@ def main(argv=None) -> int:
     p_validate.set_defaults(func=cmd_validate)
 
     p_start = sub.add_parser(
-        "start", help="start the PulseAudio daemon and expose the pipe-source"
+        "start",
+        help="start the PulseAudio daemon and expose the pipe-source and pipe-sink",
+        description="Start the userspace PulseAudio daemon unless it runs, then load what is missing:\n"
+        "the microphone source voicein, which reads the FIFO at --sink-path, and the speaker\n"
+        "sink voiceout, which writes speaker.fifo in the same directory and plays in every\n"
+        "open JupyterLab tab; both become the defaults. Run it again after every container\n"
+        "restart. Without -d it waits until Ctrl-C, which stops the daemon. Prints each\n"
+        "command it runs; exits 1 when voicein or voiceout did not load.",
+        epilog="examples:\n"
+        "  jupyterlab_voice_capture start -d\n"
+        "  jupyterlab_voice_capture start -d --sink-path /run/voice/pulseaudio.fifo",
+        formatter_class=raw,
     )
     p_start.add_argument(
         "--sink-path", default=DEFAULT_SINK_PATH, help="FIFO path (default: %(default)s)"
@@ -488,7 +610,15 @@ def main(argv=None) -> int:
     )
     p_start.set_defaults(func=cmd_start)
 
-    p_stop = sub.add_parser("stop", help="kill the running PulseAudio daemon")
+    p_stop = sub.add_parser(
+        "stop",
+        help="kill the running PulseAudio daemon",
+        description="Kill the PulseAudio daemon. The microphone source voicein and the speaker sink\n"
+        "voiceout go with it: programs in the container record and play nothing. This cannot\n"
+        "be undone without start. Prints whether the daemon was running.",
+        epilog="examples:\n  jupyterlab_voice_capture stop",
+        formatter_class=raw,
+    )
     p_stop.set_defaults(func=cmd_stop)
 
     args = parser.parse_args(argv)

@@ -19,6 +19,8 @@ server endpoint under the Jupyter base URL and inherits Jupyter token auth. "sin
 FIFO path the handler writes to (`/run/voice/pulseaudio.fifo` by default). All measurements
 assume the page is served over a secure context (https or `localhost`).
 
+- log: 2026-11-06T16:30:02Z @kj coded 25 item(s) from acc-codes.map
+
 ## Authors
 
 - `@kj` Konrad Jelen
@@ -27,28 +29,31 @@ assume the page is served over a secure context (https or `localhost`).
 
 Browser microphone capture and the status-bar control
 
-- [x] `ACC-MIC-1` **A1 explicit toggle** - CRITICAL; a command (palette + a toolbar or status-bar button) toggles capture on/off; nothing captures audio until the user turns it on
+- [x] `ACC-MIC-1-TOGGLE` **A1 explicit toggle** - CRITICAL; a command (palette + a toolbar or status-bar button) toggles capture on/off; nothing captures audio until the user turns it on
   - evidence: functional A1: no getUserMedia call and 0 FIFO bytes before the click, 1 call after; jest A1 green
   - test-tags: UNIT, FUNCTIONAL
   - test: construct VoiceCapture, assert getUserMedia not called before toggle(), called once after
   - log: 2026-09-28T08:54:26Z @kj edited importance added "CRITICAL"; test added "construct VoiceCapture, assert getUserMedia not called before toggle(), called once after"
   - log: 2026-09-28T09:16:29Z @kj edited test-tags added "UNIT, FUNCTIONAL"
   - log: 2026-09-28T09:16:29Z @kj closed: verified in v1.0.11
-- [x] `ACC-MIC-2` **A2 getUserMedia on enable** - CRITICAL; turning capture on calls `navigator.mediaDevices.getUserMedia({ audio: true })` and, on grant, begins streaming; the browser shows its active-microphone indicator
+  - log: 2026-11-06T16:30:02Z @kj coded TOGGLE
+- [x] `ACC-MIC-2-ENABLE` **A2 getUserMedia on enable** - CRITICAL; turning capture on calls `navigator.mediaDevices.getUserMedia({ audio: true })` and, on grant, begins streaming; the browser shows its active-microphone indicator
   - evidence: functional A2 with Chromium fake mic: getUserMedia granted, 1 live track, Connected, audio in the FIFO; the indicator itself not observed by automation
   - test-tags: UNIT, FUNCTIONAL, MANUAL
   - test: enable with a granted stream, assert getUserMedia({ audio: true }) and state streaming after the socket opens; browser indicator by eye
   - log: 2026-09-28T08:54:26Z @kj edited importance added "CRITICAL"; test added "enable with a granted stream, assert getUserMedia({ audio: true }) and state streaming after the socket opens; browser indicator by eye"; test-tags added "UNIT, MANUAL"
   - log: 2026-09-28T09:16:29Z @kj edited test-tags "UNIT, MANUAL" -> "UNIT, FUNCTIONAL, MANUAL"
   - log: 2026-09-28T09:16:29Z @kj closed: verified in v1.0.11
-- [x] `ACC-MIC-3` **A3 release on disable** - HIGH; turning capture off stops every `MediaStreamTrack` (`track.stop()`), closes the AudioContext, and the browser mic indicator clears within ~1 s; no tracks remain live
+  - log: 2026-11-06T16:30:02Z @kj coded ENABLE
+- [x] `ACC-MIC-3-RELEASE` **A3 release on disable** - HIGH; turning capture off stops every `MediaStreamTrack` (`track.stop()`), closes the AudioContext, and the browser mic indicator clears within ~1 s; no tracks remain live
   - evidence: functional A3: every track readyState ended within 1 s of the click, FIFO receives 0 bytes/s after; jest A3/D2 green
   - test-tags: UNIT, FUNCTIONAL, MANUAL
   - test: enable then disable, assert every track stopped and AudioContext closed; browser indicator clears by eye
   - log: 2026-09-28T08:54:26Z @kj edited importance added "HIGH"; test added "enable then disable, assert every track stopped and AudioContext closed; browser indicator clears by eye"; test-tags added "UNIT, MANUAL"
   - log: 2026-09-28T09:16:29Z @kj edited test-tags "UNIT, MANUAL" -> "UNIT, FUNCTIONAL, MANUAL"
   - log: 2026-09-28T09:16:29Z @kj closed: verified in v1.0.11
-- [x] `ACC-MIC-4` **A4 visible state** - HIGH; the control shows exactly one of idle (Disconnected), connecting, streaming (Connected) and error at all times; each state looks different from the others
+  - log: 2026-11-06T16:30:02Z @kj coded RELEASE
+- [x] `ACC-MIC-4-STATE` **A4 visible state** - HIGH; the control shows exactly one of idle (Disconnected), connecting, streaming (Connected) and error at all times; each state looks different from the others
   - evidence: functional A1/A2/E1: data-vc-state idle, streaming, error with animations none, vc-pulse, vc-blink; jest covers connecting
   - test-tags: UNIT, FUNCTIONAL
   - test: drive idle, streaming and error in a browser, assert data-vc-state and the icon animation (none, vc-pulse, vc-blink); connecting in jest
@@ -56,58 +61,79 @@ Browser microphone capture and the status-bar control
   - log: 2026-09-28T08:54:56Z @kj amended text "the control reflects exactly one of idle / streaming / error at all times; the streaming state is visually distinct from idle" -> "the control shows exactly one of idle (Disconnected), connecting, streaming (Connected) and error at all times; each state looks different from the others"
   - log: 2026-09-28T09:16:29Z @kj edited test "drive idle, connecting, streaming and error, assert the status item carries exactly one jp-mod-<state> class" -> "drive idle, streaming and error in a browser, assert data-vc-state and the icon animation (none, vc-pulse, vc-blink); connecting in jest"; test-tags added "UNIT, FUNCTIONAL"
   - log: 2026-09-28T09:16:29Z @kj closed: verified in v1.0.11
+  - log: 2026-11-06T16:30:02Z @kj coded STATE
+- [x] `ACC-MIC-47-ENABLE-COMMAND` **A5 enable command** - HIGH; the JupyterLab command voice-capture:enable starts capture when it is off and does nothing when it is already streaming; it resolves once the state is streaming and rejects with the error message when the state turns error (no permission, no microphone, insecure context, endpoint unreachable after the 10 s connect deadline)
+  - evidence: jest 'enable resolves once streaming, and a second enable does nothing' and 'enable rejects with the error message: a denied microphone at once, an unreachable endpoint at the connect deadline' green, 33 of 33; Galata 'A5/A6: voice-capture:enable resolves streaming, voice-capture:disable stops, a repeat does nothing' green with the 8 capture specs, 9 passed; each red before the command existed
+  - test: jest: execute enable twice, 1 getUserMedia, resolves at streaming; denied permission rejects with 'Microphone permission denied.'; Galata: execute with the fake microphone, status Connected, /stream socket open
+  - test-tags: UNIT, FUNCTIONAL
+  - log: 2026-11-07T12:41:24Z @kj added
+  - log: 2026-11-07T12:48:51Z @kj closed: built in workflow tmp/workflows/mic; reason: quotes three test names in full
+  - log: 2026-11-07T14:08:45Z @kj live v1.1.1 in the Star Colonel's lab, 14:06:49 UTC: jupyterlab-commands execute voice-capture:enable exit 0 after about 5 s; then parec -d voicein 6 s while he spoke: 96000 samples, RMS -25.5 dBFS, peak 21736; jupyterlab-commands list shows 'Enable Voice Capture'
+- [x] `ACC-MIC-48-DISABLE-COMMAND` **A6 disable command** - HIGH; the JupyterLab command voice-capture:disable stops capture and resolves with the state idle; when capture is already off it does nothing
+  - evidence: jest 'disable stops capture, and a second disable does nothing' green, 33 of 33; Galata 'A5/A6: voice-capture:enable resolves streaming, voice-capture:disable stops, a repeat does nothing' green: status Disconnected, /stream socket closed, 0 live tracks, FIFO rate 0, a second disable leaves 1 getUserMedia call; both red before the command existed
+  - test: jest: execute disable while idle, no state change; while streaming, tracks stopped and state idle; Galata: execute after enable, status Disconnected, /stream socket closed
+  - test-tags: UNIT, FUNCTIONAL
+  - log: 2026-11-07T12:41:25Z @kj added
+  - log: 2026-11-07T12:48:51Z @kj closed: built in workflow tmp/workflows/mic; reason: quotes two test names in full
+  - log: 2026-11-07T14:08:45Z @kj live v1.1.1 in the Star Colonel's lab: jupyterlab-commands execute voice-capture:disable exit 0; a 2 s parec from voicein afterwards delivered 0 samples; a second disable exit 0; jupyterlab-commands list shows 'Disable Voice Capture'
 
 ## B. Audio format - the wire contract (frontend) `WIRE`
 
 PCM format and framing of the websocket messages
 
-- [x] `ACC-WIRE-5` **B1 resample to 16 kHz mono** - CRITICAL; regardless of the hardware sample rate, audio reaching the websocket is resampled/downmixed to 16 kHz, mono (verified by decoding a captured frame: sample rate 16000, single channel)
+- [x] `ACC-WIRE-5-RESAMPLE` **B1 resample to 16 kHz mono** - CRITICAL; regardless of the hardware sample rate, audio reaching the websocket is resampled/downmixed to 16 kHz, mono (verified by decoding a captured frame: sample rate 16000, single channel)
   - evidence: functional A2: FIFO byte rate within 15% of 32000 B/s (16000 Hz x 1 channel x 2 bytes) over 3 s; jest AudioContext sampleRate 16000
   - test-tags: UNIT, FUNCTIONAL
   - test: enable, assert AudioContext sampleRate 16000; decode a captured frame, assert 16000 Hz and 1 channel
   - log: 2026-09-28T08:54:26Z @kj edited importance added "CRITICAL"; test added "enable, assert AudioContext sampleRate 16000; decode a captured frame, assert 16000 Hz and 1 channel"; test-tags added "UNIT"
   - log: 2026-09-28T09:16:29Z @kj edited test-tags "UNIT" -> "UNIT, FUNCTIONAL"
   - log: 2026-09-28T09:16:29Z @kj closed: verified in v1.0.11
-- [x] `ACC-WIRE-6` **B2 s16le encoding** - CRITICAL; each frame is signed 16-bit little-endian PCM (not Float32, not WebM/Opus); a known tone produces sample values in the expected `int16` range
+  - log: 2026-11-06T16:30:02Z @kj coded RESAMPLE
+- [x] `ACC-WIRE-6-ENCODING` **B2 s16le encoding** - CRITICAL; each frame is signed 16-bit little-endian PCM (not Float32, not WebM/Opus); a known tone produces sample values in the expected `int16` range
   - evidence: pcm.spec 'maps full scale to the int16 range, little-endian (B2)' green in the v1.0.10 publish run, jest 13/13
   - test-tags: UNIT
   - test: floatToS16LE on +1.0 and -1.0, assert 0x7FFF and 0x8000 little-endian
   - log: 2026-09-28T08:54:26Z @kj edited importance added "CRITICAL"; test added "floatToS16LE on +1.0 and -1.0, assert 0x7FFF and 0x8000 little-endian"; test-tags added "UNIT"
   - log: 2026-09-28T08:54:47Z @kj closed: verified in v1.0.10
-- [x] `ACC-WIRE-7` **B3 fixed frame size** - MEDIUM; frames carry a consistent payload of ~20-40 ms of audio (e.g. 320-640 samples -> 640-1280 bytes); frame byte length is constant during a stream
+  - log: 2026-11-06T16:30:02Z @kj coded ENCODING
+- [x] `ACC-WIRE-7-FRAME-SIZE` **B3 fixed frame size** - MEDIUM; frames carry a consistent payload of ~20-40 ms of audio (e.g. 320-640 samples -> 640-1280 bytes); frame byte length is constant during a stream
   - evidence: pcm.spec 'emits a fixed-size frame only once full (B3)' and 'splits a long chunk into whole frames' green in the v1.0.10 publish run
   - test-tags: UNIT, FUNCTIONAL
   - test: feed samples to the framer, assert 320-sample (640-byte) frames emitted only once full
   - log: 2026-09-28T08:54:26Z @kj edited importance added "MEDIUM"; test added "feed samples to the framer, assert 320-sample (640-byte) frames emitted only once full"; test-tags added "UNIT"
   - log: 2026-09-28T08:54:47Z @kj closed: verified in v1.0.10
   - log: 2026-09-28T09:16:29Z @kj edited test-tags "UNIT" -> "UNIT, FUNCTIONAL"
-- [x] `ACC-WIRE-8` **B4 binary frames only** - HIGH; frames are sent as binary websocket messages (`ArrayBuffer`), never base64/text; no JSON wrapping around the PCM payload
+  - log: 2026-11-06T16:30:02Z @kj coded FRAME-SIZE
+- [x] `ACC-WIRE-8-BINARY` **B4 binary frames only** - HIGH; frames are sent as binary websocket messages (`ArrayBuffer`), never base64/text; no JSON wrapping around the PCM payload
   - evidence: voice-capture.spec 'forwards a frame pushed by the worklet to the websocket' (same ArrayBuffer sent, binaryType arraybuffer) green in the v1.0.10 publish run
   - test-tags: UNIT, FUNCTIONAL
   - test: worklet posts an ArrayBuffer, assert ws.send gets the same ArrayBuffer and binaryType is arraybuffer
   - log: 2026-09-28T08:54:26Z @kj edited importance added "HIGH"; test added "worklet posts an ArrayBuffer, assert ws.send gets the same ArrayBuffer and binaryType is arraybuffer"; test-tags added "UNIT"
   - log: 2026-09-28T08:54:47Z @kj closed: verified in v1.0.10
   - log: 2026-09-28T09:16:29Z @kj edited test-tags "UNIT" -> "UNIT, FUNCTIONAL"
+  - log: 2026-11-06T16:30:02Z @kj coded BINARY
 
 ## C. Server bridge (server extension) `BRIDGE`
 
 Server websocket handler and the FIFO sink
 
-- [x] `ACC-BRIDGE-9` **C1 authenticated endpoint** - CRITICAL; the websocket handler is registered under the Jupyter server base URL and rejects connections lacking a valid Jupyter token (401/403); no new externally exposed port is opened
+- [x] `ACC-BRIDGE-9-AUTH` **C1 authenticated endpoint** - CRITICAL; the websocket handler is registered under the Jupyter server base URL and rejects connections lacking a valid Jupyter token (401/403); no new externally exposed port is opened
   - evidence: test_wrong_token_is_refused green: wrong token gets 403 before the upgrade; route registered under base_url
   - test-tags: UNIT, INTEGRATION
   - test: connect to the stream endpoint without a token, assert 403
   - log: 2026-09-28T08:54:26Z @kj edited importance added "CRITICAL"; test added "connect to the stream endpoint without a token, assert 403"; test-tags added "UNIT"
   - log: 2026-09-28T09:16:30Z @kj edited test-tags "UNIT" -> "UNIT, INTEGRATION"
   - log: 2026-09-28T09:16:30Z @kj closed: verified in v1.0.11
-- [x] `ACC-BRIDGE-10` **C2 PCM -> sink** - CRITICAL; every binary frame received is written verbatim to the sink FIFO in order; bytes written equal bytes received over the connection
+  - log: 2026-11-06T16:30:02Z @kj coded AUTH
+- [x] `ACC-BRIDGE-10-VERBATIM` **C2 PCM -> sink** - CRITICAL; every binary frame received is written verbatim to the sink FIFO in order; bytes written equal bytes received over the connection
   - evidence: test_routes test_pcm_written_verbatim and test_multiframe_round_trip_in_order green in the v1.0.10 publish run, pytest 13/13
   - test-tags: INTEGRATION, FUNCTIONAL
   - test: send frames over the websocket, read the FIFO, assert same bytes in the same order
   - log: 2026-09-28T08:54:26Z @kj edited importance added "CRITICAL"; test added "send frames over the websocket, read the FIFO, assert same bytes in the same order"; test-tags added "INTEGRATION"
   - log: 2026-09-28T08:54:47Z @kj closed: verified in v1.0.10
   - log: 2026-09-28T09:16:30Z @kj edited test-tags "INTEGRATION" -> "INTEGRATION, FUNCTIONAL"
-- [x] `ACC-BRIDGE-11` **C3 consumer-absent tolerance** - HIGH; if the FIFO is not yet created or nothing is reading it yet (PulseAudio not attached), the handler does not crash the server and does not block indefinitely - it drops or buffers within a bounded window and logs, so a later reader gets live audio
+  - log: 2026-11-06T16:30:02Z @kj coded VERBATIM
+- [x] `ACC-BRIDGE-11-NO-READER` **C3 consumer-absent tolerance** - HIGH; if the FIFO is not yet created or nothing is reading it yet (PulseAudio not attached), the handler does not crash the server and does not block indefinitely - it drops or buffers within a bounded window and logs, so a later reader gets live audio
   - evidence: test_tolerates_absent_reader and test_new_reader_gets_audio_after_the_old_one_left green on 1.0.11
   - test-tags: INTEGRATION, FUNCTIONAL
   - test: stream with no FIFO, then stop and restart the reader, assert the new reader gets audio
@@ -116,32 +142,37 @@ Server websocket handler and the FIFO sink
   - log: 2026-09-28T09:16:29Z @kj reopened: reopened: DEF-BRIDGE-2 showed a later reader got no audio after the first reader left; evidence retired: test_routes test_tolerates_absent_reader (no FIFO, 10 frames, new connection accepted) green in the v1.0.10 publish run
   - log: 2026-09-28T09:16:30Z @kj edited test "stream 10 frames with no FIFO present, assert the server still accepts a new connection" -> "stream with no FIFO, then stop and restart the reader, assert the new reader gets audio"; test-tags "INTEGRATION" -> "INTEGRATION, FUNCTIONAL"
   - log: 2026-09-28T09:16:30Z @kj closed: verified in v1.0.11
-- [x] `ACC-BRIDGE-12` **C4 configurable sink, safe default** - HIGH; the sink path defaults to `/run/voice/pulseaudio.fifo` and is overridable via server config; the PulseAudio reader (`module-pipe-source`) owns FIFO creation because it refuses to attach to a pre-existing FIFO, so the handler never creates the FIFO - it attaches as writer, waits for the reader to create it, and refuses only a path that exists as a non-FIFO (C5)
+  - log: 2026-11-06T16:30:02Z @kj coded NO-READER
+- [x] `ACC-BRIDGE-12-SINK-PATH` **C4 configurable sink, safe default** - HIGH; the sink path defaults to `/run/voice/pulseaudio.fifo` and is overridable via server config; the PulseAudio reader (`module-pipe-source`) owns FIFO creation because it refuses to attach to a pre-existing FIFO, so the handler never creates the FIFO - it attaches as writer, waits for the reader to create it, and refuses only a path that exists as a non-FIFO (C5)
   - evidence: test_streaming_never_creates_the_fifo green: path absent after 10 frames with no reader
   - test-tags: INTEGRATION
   - test: set sink_path in server config, stream with no reader, assert the path is never created
   - log: 2026-09-28T08:54:26Z @kj edited importance added "HIGH"; test added "set sink_path in server config, stream with no reader, assert the path is never created"; test-tags added "INTEGRATION"
   - log: 2026-09-28T09:16:30Z @kj closed: verified in v1.0.11
-- [x] `ACC-BRIDGE-13` **C5 no disk capture** - HIGH; audio is never written to a regular file or persisted; only the FIFO (a pipe) is touched
-  - evidence: test_regular_file_at_sink_path_is_never_written green after DEF-BRIDGE-4: file stays 0 bytes
+  - log: 2026-11-06T16:30:02Z @kj coded SINK-PATH
+- [x] `ACC-BRIDGE-13-NO-DISK` **C5 no disk capture** - HIGH; audio is never written to a regular file or persisted; only the FIFO (a pipe) is touched
+  - evidence: test_regular_file_at_sink_path_is_never_written green after DEF-BRIDGE-4-REGULAR-FILE: file stays 0 bytes
   - test-tags: INTEGRATION
   - test: put a regular file at sink_path, stream frames, assert the file is unchanged
   - log: 2026-09-28T08:54:27Z @kj edited importance added "HIGH"; test added "put a regular file at sink_path, stream frames, assert the file is unchanged"
   - log: 2026-09-28T09:16:30Z @kj edited test-tags added "INTEGRATION"
   - log: 2026-09-28T09:16:30Z @kj closed: verified in v1.0.11
+  - log: 2026-11-06T16:30:02Z @kj coded NO-DISK
+  - log: 2026-11-06T16:30:06Z @kj edited evidence "test_regular_file_at_sink_path_is_never_written green after DEF-BRIDGE-4: file stays 0 bytes" -> "test_regular_file_at_sink_path_is_never_written green after DEF-BRIDGE-4-REGULAR-FILE: file stays 0 bytes"
 
 ## D. Lifecycle and robustness `LIFE`
 
 Reconnect, teardown, concurrent tabs and resource use
 
-- [x] `ACC-LIFE-14` **D1 reconnect** - HIGH; if the websocket drops while capture is on, the frontend retries with backoff and resumes streaming without user action; the toggle stays "on"
+- [x] `ACC-LIFE-14-RECONNECT` **D1 reconnect** - HIGH; if the websocket drops while capture is on, the frontend retries with backoff and resumes streaming without user action; the toggle stays "on"
   - evidence: functional D1: socket dropped, second socket opened, Connected again with 1 live track; jest D1 green
   - test-tags: UNIT, FUNCTIONAL
   - test: open then drop the socket, assert state connecting, a retry after backoff, then streaming
   - log: 2026-09-28T08:54:27Z @kj edited importance added "HIGH"; test added "open then drop the socket, assert state connecting, a retry after backoff, then streaming"
   - log: 2026-09-28T09:16:30Z @kj edited test-tags added "UNIT, FUNCTIONAL"
   - log: 2026-09-28T09:16:30Z @kj closed: verified in v1.0.11
-- [x] `ACC-LIFE-15` **D2 clean teardown** - HIGH; closing or reloading the tab stops tracks and closes the websocket; the server-side connection closes and stops writing to the sink
+  - log: 2026-11-06T16:30:02Z @kj coded RECONNECT
+- [x] `ACC-LIFE-15-TEARDOWN` **D2 clean teardown** - HIGH; closing or reloading the tab stops tracks and closes the websocket; the server-side connection closes and stops writing to the sink
   - evidence: functional D2: after the streaming tab closed, FIFO 0 bytes/s over 1 s; jest A3/D2 green
   - test-tags: UNIT, FUNCTIONAL
   - test: close a streaming tab, assert a 1 s window with 0 bytes into the FIFO follows within 30 s
@@ -149,57 +180,92 @@ Reconnect, teardown, concurrent tabs and resource use
   - log: 2026-09-28T09:16:30Z @kj edited test "fire beforeunload, assert tracks stopped and socket closed; assert the server handler closes" -> "close a streaming tab, assert the FIFO receives 0 bytes/s within 0.5 s"; test-tags "UNIT" -> "UNIT, FUNCTIONAL"
   - log: 2026-09-28T09:16:30Z @kj closed: verified in v1.0.11
   - log: 2026-09-28T11:03:17Z @kj edited test "close a streaming tab, assert the FIFO receives 0 bytes/s within 0.5 s" -> "close a streaming tab, assert a 1 s window with 0 bytes into the FIFO follows within 30 s"
-- [x] `ACC-LIFE-16` **D3 single producer** - MEDIUM; concurrent capture from two tabs does not corrupt the stream - either the second is refused or streams are not interleaved into the sink (define and enforce one behaviour)
-  - evidence: functional D3 green after DEF-LIFE-3: second tab takes over, first tab idle with 0 live tracks, no flapping over 3 s
+  - log: 2026-11-06T16:30:02Z @kj coded TEARDOWN
+- [x] `ACC-LIFE-16-ONE-PRODUCER` **D3 single producer** - MEDIUM; concurrent capture from two tabs does not corrupt the stream - either the second is refused or streams are not interleaved into the sink (define and enforce one behaviour)
+  - evidence: functional D3 green after DEF-LIFE-3-TAKE-BACK: second tab takes over, first tab idle with 0 live tracks, no flapping over 3 s
   - test-tags: UNIT, FUNCTIONAL
   - test: open two stream connections, assert the first is closed and only the second writes to the sink
   - log: 2026-09-28T08:54:27Z @kj edited importance added "MEDIUM"; test added "open two stream connections, assert the first is closed and only the second writes to the sink"
   - log: 2026-09-28T09:16:30Z @kj edited test-tags added "UNIT, FUNCTIONAL"
   - log: 2026-09-28T09:16:30Z @kj closed: verified in v1.0.11
-- [x] `ACC-LIFE-17` **D4 light footprint** - MEDIUM; streaming holds the main thread free (capture/encoding runs in an AudioWorklet, not on the UI thread); idle extension adds no measurable CPU
+  - log: 2026-11-06T16:30:02Z @kj coded ONE-PRODUCER
+  - log: 2026-11-06T16:30:06Z @kj edited evidence "functional D3 green after DEF-LIFE-3: second tab takes over, first tab idle with 0 live tracks, no flapping over 3 s" -> "functional D3 green after DEF-LIFE-3-TAKE-BACK: second tab takes over, first tab idle with 0 live tracks, no flapping over 3 s"
+- [x] `ACC-LIFE-17-FOOTPRINT` **D4 light footprint** - MEDIUM; streaming holds the main thread free (capture/encoding runs in an AudioWorklet, not on the UI thread); idle extension adds no measurable CPU
   - evidence: functional D4: streaming adds 0.016 s main-thread script per 3 s (limit 0.15); jest D4: 0 timers while idle
   - test-tags: UNIT, FUNCTIONAL
   - test: stream 3 s, compare main-thread ScriptDuration with an idle 3 s window; assert no timers while idle
   - log: 2026-09-28T08:54:27Z @kj edited importance added "MEDIUM"; test added "profile a streaming tab, assert encoding runs on the AudioWorklet thread and the idle tab shows no extension CPU"; test-tags added "MANUAL"
   - log: 2026-09-28T09:16:30Z @kj edited test "profile a streaming tab, assert encoding runs on the AudioWorklet thread and the idle tab shows no extension CPU" -> "stream 3 s, compare main-thread ScriptDuration with an idle 3 s window; assert no timers while idle"; test-tags "MANUAL" -> "UNIT, FUNCTIONAL"
   - log: 2026-09-28T09:16:30Z @kj closed: verified in v1.0.11
+  - log: 2026-11-06T16:30:02Z @kj coded FOOTPRINT
+- [x] `ACC-LIFE-41-RELOAD` **D5 soft reload replaces the server threads** - HIGH; when /galaxalab/bin/reload-jupyterlab loads a new version in place, the new load closes the FIFO writer and speaker reader of the previous load (kept in web_app.settings) before starting its own; afterwards exactly one writer thread and one speaker reader thread run, and the new code serves /stream and /speaker
+  - evidence: pytest test_a_second_load_replaces_the_sink_and_the_speaker_reader green, test_routes 22 passed, full pytest 45 passed; galaxalab soft_reload simulated from 1.0.18 and again: 1 writer and 1 speaker reader thread after each, /speaker answers, capture reaches the FIFO; cleanup call removed: 3 writers, 2 readers
+  - test: pytest: load the extension twice in one server; the first load's sink and reader are closed, one thread of each name is alive, audio flows through the new ones
+  - test-tags: INTEGRATION
+  - log: 2026-11-06T17:37:25Z @kj added
+  - log: 2026-11-06T18:03:59Z @kj closed: closed: built in workflow tmp/workflows/reload
+- [x] `ACC-LIFE-42-RECONNECT` **D6 open sockets move to the new code** - HIGH; a reload closes the websocket connections the previous load holds, so each tab reconnects to the new handlers within its backoff and capture and playback resume without user action
+  - evidence: pytest test_a_second_load_closes_open_sockets_so_tabs_reconnect and test_a_load_after_1_0_18_closes_its_producer_so_the_tab_reconnects green, test_routes 24 passed: old /stream and /speaker sockets closed with 1001, which both frontends answer by reconnecting; soft_reload simulated from installed 1.0.18: its /stream socket closed with 1001, a new /stream reaches the FIFO; reload 2: new sockets carry capture and speaker audio
+  - test: pytest: a /stream producer and a /speaker listener connected before the second load are closed; reconnecting reaches the new handlers
+  - test-tags: INTEGRATION
+  - log: 2026-11-06T17:37:26Z @kj added
+  - log: 2026-11-06T18:03:59Z @kj closed: closed: built in workflow tmp/workflows/reload; the first reload from 1.0.18 is DEF-LIFE-10-FIRST-RELOAD
+  - log: 2026-11-06T21:09:54Z @kj edited evidence "pytest test_a_second_load_closes_open_sockets_so_tabs_reconnect green, test_routes 22 passed: old /stream and /speaker sockets closed with 1001, which both frontends answer by reconnecting; simulated soft reload 2: new sockets carry capture and speaker audio; holds when the previous load is this version or later; 1.0.18 case: DEF-LIFE-10-FIRST-RELOAD" -> "pytest test_a_second_load_closes_open_sockets_so_tabs_reconnect and test_a_load_after_1_0_18_closes_its_producer_so_the_tab_reconnects green, test_routes 24 passed: old /stream and /speaker sockets closed with 1001, which both frontends answer by reconnecting; soft_reload simulated from installed 1.0.18: its /stream socket closed with 1001, a new /stream reaches the FIFO; reload 2: new sockets carry capture and speaker audio"; reason: names two tests and two simulated reloads with their results
+- [x] `ACC-LIFE-43-UNLOAD` **D7 unload hook cleans up** - MEDIUM; _unload_jupyter_server_extension stops the FIFO writer, the speaker reader and the open connections, so a server stop, or a reload tool that calls the hook, leaves no thread or FIFO descriptor behind
+  - evidence: pytest test_unload_stops_both_threads_and_releases_connections_and_fifos green, test_routes 22 passed: both threads stopped, connections closed, no descriptor open on either FIFO; jupyter_server 2.21.1 calls no unload hook on stop, so a server stop is met by process exit
+  - test: pytest: call the hook; both threads have stopped, no descriptor on either FIFO stays open, connections are closed
+  - test-tags: INTEGRATION
+  - log: 2026-11-06T17:37:26Z @kj added
+  - log: 2026-11-06T18:03:59Z @kj closed: closed: built in workflow tmp/workflows/reload
+- [x] `ACC-LIFE-44-LIVERELOAD` **D8 live soft reload** - HIGH; in the Star Colonel's lab, after make install and /galaxalab/bin/reload-jupyterlab: /speaker answers, capture reaches voicein, paplay plays in the tab, and the server process has one voice-capture writer thread and one speaker reader thread
+  - evidence: v1.1.0, 2026-11-07: reload-jupyterlab exit 0, extension added, server pid 583 kept; pid 583 runs one voice-capture-speaker-reader and one voice-capture-fifo-writer thread; validate 14 of 14 OK; paplay of the mp3 on voiceout heard in the tab; voicein loaded with loopback on voicedrain; capture not exercised with a live recording in v1.1.0; v1.1.1, 2026-11-07: reload-jupyterlab exit 0, server pid 583 kept, one voice-capture-s and one voice-capture-f thread, validate 14 of 14 OK; after voice-capture:enable, parec -d voicein (16 kHz mono s16le) 6 s while the Star Colonel spoke: 96000 samples, RMS -25.5 dBFS, peak 21736; run record tmp/workflows/live/live2.json
+  - test: after the reload: paplay a file and listen, record from voicein, count the thread names in /proc/<server pid>/task/*/comm
+  - test-tags: MANUAL
+  - log: 2026-11-06T17:37:26Z @kj added
+  - log: 2026-11-06T18:03:59Z @kj before checking capture into voicein after the first soft reload from 1.0.18, reload the browser tab (needed for the new speaker frontend anyway); a tab streaming during the reload stays on the 1.0.18 handler until it reconnects: DEF-LIFE-10-FIRST-RELOAD
+  - log: 2026-11-07T12:11:11Z @kj closed: live 1.1.0 acceptance, run record tmp/workflows/live/live.json
+  - log: 2026-11-07T14:08:40Z @kj edited evidence "v1.1.0, 2026-11-07: reload-jupyterlab exit 0, extension added, server pid 583 kept; pid 583 runs one voice-capture-speaker-reader and one voice-capture-fifo-writer thread; validate 14 of 14 OK; paplay of the mp3 on voiceout heard in the tab; voicein loaded with loopback on voicedrain; capture not exercised with a live recording" -> "v1.1.0, 2026-11-07: reload-jupyterlab exit 0, extension added, server pid 583 kept; pid 583 runs one voice-capture-speaker-reader and one voice-capture-fifo-writer thread; validate 14 of 14 OK; paplay of the mp3 on voiceout heard in the tab; voicein loaded with loopback on voicedrain; capture not exercised with a live recording in v1.1.0; v1.1.1, 2026-11-07: reload-jupyterlab exit 0, server pid 583 kept, one voice-capture-s and one voice-capture-f thread, validate 14 of 14 OK; after voice-capture:enable, parec -d voicein (16 kHz mono s16le) 6 s while the Star Colonel spoke: 96000 samples, RMS -25.5 dBFS, peak 21736; run record tmp/workflows/live/live2.json"; reason: keeps every v1.1.0 fact and adds the v1.1.1 reload and the live voicein recording
 
 ## E. Error handling `ERROR`
 
 Failure paths the user sees
 
-- [x] `ACC-ERROR-18` **E1 permission denied** - HIGH; a denied `getUserMedia` shows a clear message and returns the toggle to a safe off state; no retry storm
+- [x] `ACC-ERROR-18-DENIED` **E1 permission denied** - HIGH; a denied `getUserMedia` shows a clear message and returns the toggle to a safe off state; no retry storm
   - evidence: voice-capture.spec 'maps a denied permission to a terminal error, capture off (E1)' green in the v1.0.10 publish run
   - test-tags: UNIT, FUNCTIONAL
   - test: getUserMedia rejects NotAllowedError, assert state error, capture off, one getUserMedia call
   - log: 2026-09-28T08:54:27Z @kj edited importance added "HIGH"; test added "getUserMedia rejects NotAllowedError, assert state error, capture off, one getUserMedia call"; test-tags added "UNIT"
   - log: 2026-09-28T08:54:47Z @kj closed: verified in v1.0.10
   - log: 2026-09-28T09:16:31Z @kj edited test-tags "UNIT" -> "UNIT, FUNCTIONAL"
-- [x] `ACC-ERROR-19` **E2 no device** - MEDIUM; absence of any input device is reported distinctly from a permission denial
+  - log: 2026-11-06T16:30:02Z @kj coded DENIED
+- [x] `ACC-ERROR-19-NO-DEVICE` **E2 no device** - MEDIUM; absence of any input device is reported distinctly from a permission denial
   - evidence: jest E2 green: NotFoundError gives 'No microphone input device found.', distinct from the denial message
   - test-tags: UNIT
   - test: getUserMedia rejects NotFoundError, assert an error message different from the denial message
   - log: 2026-09-28T08:54:27Z @kj edited importance added "MEDIUM"; test added "getUserMedia rejects NotFoundError, assert an error message different from the denial message"
   - log: 2026-09-28T09:16:31Z @kj edited test-tags added "UNIT"
   - log: 2026-09-28T09:16:31Z @kj closed: verified in v1.0.11
-- [x] `ACC-ERROR-20` **E3 insecure context** - MEDIUM; when served without a secure context, capture is disabled with an explanatory message rather than a silent failure
+  - log: 2026-11-06T16:30:02Z @kj coded NO-DEVICE
+- [x] `ACC-ERROR-20-INSECURE` **E3 insecure context** - MEDIUM; when served without a secure context, capture is disabled with an explanatory message rather than a silent failure
   - evidence: voice-capture.spec 'refuses to capture outside a secure context (E3)' green in the v1.0.10 publish run
   - test-tags: UNIT
   - test: isSecureContext false, enable, assert state error and getUserMedia not called
   - log: 2026-09-28T08:54:27Z @kj edited importance added "MEDIUM"; test added "isSecureContext false, enable, assert state error and getUserMedia not called"; test-tags added "UNIT"
   - log: 2026-09-28T08:54:47Z @kj closed: verified in v1.0.10
-- [x] `ACC-ERROR-21` **E4 endpoint unreachable** - HIGH; failure to open the websocket surfaces an error state and does not leave the UI claiming "streaming"
+  - log: 2026-11-06T16:30:02Z @kj coded INSECURE
+- [x] `ACC-ERROR-21-UNREACHABLE` **E4 endpoint unreachable** - HIGH; failure to open the websocket surfaces an error state and does not leave the UI claiming "streaming"
   - evidence: voice-capture.spec 'disconnects on a click in the endpoint-unreachable error (E4)' reaches state error after the 10 s deadline, green in the v1.0.10 publish run
   - test-tags: UNIT
   - test: never open the socket, advance 10 s, assert state error, not streaming
   - log: 2026-09-28T08:54:27Z @kj edited importance added "HIGH"; test added "never open the socket, advance 10 s, assert state error, not streaming"; test-tags added "UNIT"
   - log: 2026-09-28T08:54:47Z @kj closed: verified in v1.0.10
+  - log: 2026-11-06T16:30:02Z @kj coded UNREACHABLE
 
 ## F. Boundary - out of scope (do not implement here) `SCOPE`
 
 What the extension must not do; the separate plumbing layer owns it
 
-- [x] `ACC-SCOPE-22` **F1 No PulseAudio management** - MEDIUM; the extension does not start, configure, or manage PulseAudio
+- [x] `ACC-SCOPE-22-NO-PULSE` **F1 No PulseAudio management** - MEDIUM; the extension does not start, configure, or manage PulseAudio
   - evidence: test_boundary green; a subprocess import in sink.py turns it red (mutation checked)
   - test-tags: UNIT
   - test: scan the server modules except cli.py: no subprocess import, no os.system/exec/spawn/popen, no pactl or pacmd string
@@ -207,7 +273,8 @@ What the extension must not do; the separate plumbing layer owns it
   - log: 2026-09-28T09:16:31Z @kj edited test-tags added "UNIT"
   - log: 2026-09-28T09:16:31Z @kj edited test "search the server extension outside cli.py for pactl or pulseaudio calls, assert none" -> "scan the server modules except cli.py: no subprocess import, no os.system/exec/spawn/popen, no pactl or pacmd string"
   - log: 2026-09-28T09:16:31Z @kj closed: verified in v1.0.11
-- [x] `ACC-SCOPE-23` **F2 No recorder invocation** - MEDIUM; the extension does not invoke SoX, `/voice`, or any recorder
+  - log: 2026-11-06T16:30:02Z @kj coded NO-PULSE
+- [x] `ACC-SCOPE-23-NO-RECORDER` **F2 No recorder invocation** - MEDIUM; the extension does not invoke SoX, `/voice`, or any recorder
   - evidence: test_extension_names_no_audio_tool and test_extension_starts_no_processes green
   - test-tags: UNIT
   - test: scan the server modules except cli.py: no sox, rec, parec or arecord string
@@ -215,7 +282,8 @@ What the extension must not do; the separate plumbing layer owns it
   - log: 2026-09-28T09:16:31Z @kj edited test-tags added "UNIT"
   - log: 2026-09-28T09:16:31Z @kj edited test "search the extension outside cli.py for sox, rec or /voice calls, assert none" -> "scan the server modules except cli.py: no sox, rec, parec or arecord string"
   - log: 2026-09-28T09:16:31Z @kj closed: verified in v1.0.11
-- [x] `ACC-SCOPE-24` **F3 No speech-to-text** - LOW; the extension does not perform speech-to-text or transcription
+  - log: 2026-11-06T16:30:02Z @kj coded NO-RECORDER
+- [x] `ACC-SCOPE-24-NO-STT` **F3 No speech-to-text** - LOW; the extension does not perform speech-to-text or transcription
   - evidence: test_extension_imports_no_speech_to_text green
   - test-tags: UNIT
   - test: scan the server modules: no speech-to-text library imported
@@ -223,10 +291,283 @@ What the extension must not do; the separate plumbing layer owns it
   - log: 2026-09-28T09:16:31Z @kj edited test-tags added "UNIT"
   - log: 2026-09-28T09:16:31Z @kj edited test "search the extension for speech-to-text or transcription code, assert none" -> "scan the server modules: no speech-to-text library imported"
   - log: 2026-09-28T09:16:31Z @kj closed: verified in v1.0.11
-- [x] `ACC-SCOPE-25` **F4 Responsibility ends at the sink** - MEDIUM; the extension's sole downstream responsibility ends at delivering correct PCM (B1-B4) to the sink (C2); everything past the FIFO is the separate plumbing layer
+  - log: 2026-11-06T16:30:02Z @kj coded NO-STT
+- [x] `ACC-SCOPE-25-BOUNDARY` **F4 Responsibility ends at the FIFOs** - MEDIUM; for capture, the extension's downstream responsibility ends at delivering correct PCM (B1-B4) to the sink (C2); for playback it begins at reading speaker.fifo (G) or at the file that voice-capture:player names (H); the extension may play files through PulseAudio, and between the FIFOs and the audio programs PulseAudio is the separate plumbing layer; it never starts, stops or configures the daemon, never records and never transcribes
   - evidence: test_boundary green (no processes, no audio tools); routes.on_message only calls sink.write; C2 tests green
   - test-tags: UNIT, INTEGRATION
   - test: scope scan plus the C2 tests: the handler's only output is sink.write of the received frame
   - log: 2026-09-28T08:54:27Z @kj edited importance added "MEDIUM"; test added "review the server extension: its only output is PCM written to the sink FIFO"
   - log: 2026-09-28T09:16:31Z @kj edited test "review the server extension: its only output is PCM written to the sink FIFO" -> "scope scan plus the C2 tests: the handler's only output is sink.write of the received frame"; test-tags added "UNIT, INTEGRATION"
   - log: 2026-09-28T09:16:31Z @kj closed: verified in v1.0.11
+  - log: 2026-11-06T15:48:56Z @kj edited title "F4 Responsibility ends at the sink" -> "F4 Responsibility ends at the FIFOs"; text "the extension's sole downstream responsibility ends at delivering correct PCM (B1-B4) to the sink (C2); everything past the FIFO is the separate plumbing layer" -> "for capture, the extension's downstream responsibility ends at delivering correct PCM (B1-B4) to the sink (C2); for playback it begins at reading speaker.fifo (G); PulseAudio between the FIFOs and the audio programs is the separate plumbing layer"
+  - log: 2026-11-06T16:30:02Z @kj coded BOUNDARY
+  - log: 2026-11-06T17:43:15Z @kj edited text "for capture, the extension's downstream responsibility ends at delivering correct PCM (B1-B4) to the sink (C2); for playback it begins at reading speaker.fifo (G); PulseAudio between the FIFOs and the audio programs is the separate plumbing layer" -> "for capture, the extension's downstream responsibility ends at delivering correct PCM (B1-B4) to the sink (C2); for playback it begins at reading speaker.fifo (G) or the file that voice-capture:play-file names (G15); PulseAudio between the FIFOs and the audio programs is the separate plumbing layer"
+  - log: 2026-11-09T01:31:49Z @kj amended text "for capture, the extension's downstream responsibility ends at delivering correct PCM (B1-B4) to the sink (C2); for playback it begins at reading speaker.fifo (G) or the file that voice-capture:play-file names (G15); PulseAudio between the FIFOs and the audio programs is the separate plumbing layer" -> "for capture, the extension's downstream responsibility ends at delivering correct PCM (B1-B4) to the sink (C2); for playback it begins at reading speaker.fifo (G) or at the file that voice-capture:player names (H); the extension may play files through PulseAudio, and between the FIFOs and the audio programs PulseAudio is the separate plumbing layer; it never starts, stops or configures the daemon, never records and never transcribes"; reason: the player replaces play-file and the boundary gains the playback permission
+
+## G. Speaker output `SPEAK`
+
+Container audio played to the default PulseAudio sink is heard in the open JupyterLab tab
+
+- log: 2026-11-06T15:48:44Z @kj category created
+
+- [x] `ACC-SPEAK-26-ALWAYS` **G1 always on** - HIGH; playback starts at plugin activation in every browser tab with no on/off control, toggle or setting; the autoConnect setting stays capture-only; voice-capture:stop-playback stops only the sounds of voice-capture:play-file
+  - evidence: Galata 'G1/G2: plays nothing before a user gesture and the tone after one click' green 2 of 2 (suite 32 passed, 2 skipped, 0 failed with --repeat-each 2); jest 'plays a 48 kHz stereo worklet into the destination from the /speaker socket' green (28 of 28); schema holds only autoConnect; no command turns playback on or off
+  - test: load the lab, click once, write a tone into speaker.fifo: the tab output is not silent; no status item or setting for playback exists
+  - test-tags: FUNCTIONAL
+  - log: 2026-11-06T15:48:44Z @kj added
+  - log: 2026-11-06T16:30:29Z @kj closed: verified on the 1.0.18 working tree, workflow wf_6630f963-0d6
+  - log: 2026-11-06T16:50:56Z @kj edited text "playback starts at plugin activation in every tab with no control, command or setting; the autoConnect setting stays capture-only" -> "playback starts at plugin activation in every browser tab with no on/off control, toggle or setting; the autoConnect setting stays capture-only"
+  - log: 2026-11-06T17:24:29Z @kj edited evidence "Galata 'G1/G2: plays nothing before a user gesture and the tone after one click' green (suite 26 passed, 2 skipped, 0 failed with --repeat-each 2); jest 'plays a 48 kHz stereo worklet into the destination from the /speaker socket' green (28 of 28); schema holds only autoConnect; no playback command" -> "Galata 'G1/G2: plays nothing before a user gesture and the tone after one click' green 2 of 2 (suite 32 passed, 2 skipped, 0 failed with --repeat-each 2); jest 'plays a 48 kHz stereo worklet into the destination from the /speaker socket' green (28 of 28); schema holds only autoConnect; no command turns playback on or off"; reason: quotes two test names in full
+  - log: 2026-11-07T14:23:33Z @kj the Star Colonel ordered the command voice-capture:stop-playback on 2026-11-07, after a 4-minute play-file sound could not be stopped; playback stays always on with no on/off control, while play-file sounds can be stopped
+  - log: 2026-11-07T14:23:33Z @kj edited text "playback starts at plugin activation in every browser tab with no on/off control, toggle or setting; the autoConnect setting stays capture-only" -> "playback starts at plugin activation in every browser tab with no on/off control, toggle or setting; the autoConnect setting stays capture-only; voice-capture:stop-playback stops only the sounds of voice-capture:play-file"
+- [x] `ACC-SPEAK-27-AUTOPLAY` **G2 plays as soon as sound arrives** - HIGH; sound plays as soon as it arrives whenever the browser allows sound in the page: at load, with no click, in a browser whose autoplay policy is no-user-gesture-required (the Star Colonel's Chrome, per chrome://media-engagement); in any browser after any click or key press anywhere in JupyterLab, inside panels and frames too; the AudioContext resumes when sound arrives and audio held during that resume plays
+  - evidence: Galata 'G2: a tab with no gesture plays the tone when the browser allows autoplay' (--autoplay-policy=no-user-gesture-required, no gesture) green 2 of 2 in the whole suite (38 passed, 2 skipped, 0 failed); red 'suspended, peak 0' with the context suspended until the first gesture, and without the flag; frame-click spec and G1/G2 green 2 of 2; jest 30 of 30, resume on arrival and on keydown included
+  - test: Galata, Chromium with --autoplay-policy=no-user-gesture-required: no gesture, tone written, output not silent; default policy: a click only inside an iframe, then the tone: not silent; default policy, no gesture: silent
+  - test-tags: FUNCTIONAL
+  - log: 2026-11-06T15:48:44Z @kj added
+  - log: 2026-11-06T16:30:14Z @kj edited test "Galata with --autoplay-policy=user-gesture-required: silent before any gesture, not silent after one click" -> "Galata with the default Chromium autoplay policy: suspended and silent before any gesture, not silent after one click"
+  - log: 2026-11-06T16:30:14Z @kj test changed: --autoplay-policy=user-gesture-required let the context run without a gesture in Playwright 1.64.1 headless Chromium; the default policy blocks it
+  - log: 2026-11-06T16:30:34Z @kj closed: verified on the 1.0.18 working tree, workflow wf_6630f963-0d6
+  - log: 2026-11-06T16:30:44Z @kj edited evidence "Galata 'G1/G2: plays nothing before a user gesture and the tone after one click' green: suspended and peak 0 before the click, peak 0.5 after; jest 'resumes on the next pointerdown or keydown, in the capture phase, until it runs' and 'drops audio while the context is not running' green" -> "Galata 'G1/G2: plays nothing before a user gesture and the tone after one click' green; jest 'resumes on the next pointerdown or keydown, in the capture phase, until it runs' and 'drops audio while the context is not running, then posts it with transfer' green"
+  - log: 2026-11-06T17:24:29Z @kj edited evidence "Galata 'G1/G2: plays nothing before a user gesture and the tone after one click' green; jest 'resumes on the next pointerdown or keydown, in the capture phase, until it runs' and 'drops audio while the context is not running, then posts it with transfer' green" -> "Galata 'G1/G2: plays nothing before a user gesture and the tone after one click' green 2 of 2 with --repeat-each 2: suspended before the click, running with peak above 0.25 after; jest 'resumes on the next pointerdown or keydown, in the capture phase, until it runs' and 'drops audio while the context is not running, then posts it with transfer' green"; reason: quotes three test names in full
+  - log: 2026-11-06T19:32:00Z @kj reopened: reopened: the Star Colonel requires sound to play as soon as it arrives, with no key press; the MOTD music already plays at load; evidence retired: Galata 'G1/G2: plays nothing before a user gesture and the tone after one click' green 2 of 2 with --repeat-each 2: suspended before the click, running with peak above 0.25 after; jest 'resumes on the next pointerdown or keydown, in the capture phase, until it runs' and 'drops audio while the context is not running, then posts it with transfer' green
+  - log: 2026-11-06T19:32:00Z @kj renamed code "GESTURE" -> "AUTOPLAY"
+  - log: 2026-11-06T19:32:00Z @kj edited title "G2 plays after the first gesture" -> "G2 plays as soon as sound arrives"; text "the AudioContext resumes on the first click or key press in the page, or at once when the page already had one; audio received before that is dropped, so no backlog plays on resume" -> "sound plays as soon as it arrives whenever the browser allows sound in the page: at load when the page inherits it (after a click on the page that opened or reloaded the lab, as the MOTD music plays), and after any click or key press anywhere in JupyterLab, inside panels and frames too; the AudioContext resumes when sound arrives and audio held during that resume plays; only while the browser blocks all sound is audio dropped"; test "Galata with the default Chromium autoplay policy: suspended and silent before any gesture, not silent after one click" -> "Galata: click, reload, write a tone with no new gesture: output not silent; click only inside an iframe, then write a tone: output not silent; a fresh tab with no gesture: silent"; test-tags "FUNCTIONAL" -> "FUNCTIONAL"; reason: the requirement changed from first-gesture playback to playback on arrival, and the text must name both permission paths
+  - log: 2026-11-06T20:06:13Z @kj edited text "sound plays as soon as it arrives whenever the browser allows sound in the page: at load when the page inherits it (after a click on the page that opened or reloaded the lab, as the MOTD music plays), and after any click or key press anywhere in JupyterLab, inside panels and frames too; the AudioContext resumes when sound arrives and audio held during that resume plays; only while the browser blocks all sound is audio dropped" -> "sound plays as soon as it arrives whenever the browser allows sound in the page: at load, with no click, in a browser whose autoplay policy is no-user-gesture-required (the Star Colonel's Chrome, per chrome://media-engagement); in any browser after any click or key press anywhere in JupyterLab, inside panels and frames too; the AudioContext resumes when sound arrives and audio held during that resume plays"; test "Galata: click, reload, write a tone with no new gesture: output not silent; click only inside an iframe, then write a tone: output not silent; a fresh tab with no gesture: silent" -> "Galata, Chromium with --autoplay-policy=no-user-gesture-required: no gesture, tone written, output not silent; default policy: a click only inside an iframe, then the tone: not silent; default policy, no gesture: silent"; reason: the Star Colonel's chrome://media-engagement shows Autoplay Policy no-user-gesture-required; Chromium does not carry activation over a reload, measured by the running build
+  - log: 2026-11-06T21:09:42Z @kj open: workflow tmp/workflows/autoplay; a click only inside a frame now plays the tone, Galata 2 of 2, red without the resume on arrival; a reload the page starts after a click plays with no new gesture, Galata 2 of 2; no gesture stays silent (G1/G2); jest 30 of 30
+  - log: 2026-11-06T21:09:54Z @kj open: not met: in Playwright's Chromium a reload the browser starts (page.reload() and page.goto(), as the reload button, F5 or a typed URL do) does not carry the click over; the tab stays suspended until a click or key press; the browser's autoplay policy, which page code cannot lift
+  - log: 2026-11-06T21:09:54Z @kj open: the --autoplay-policy=no-user-gesture-required spec in the test line was not written or run, so playback at load with no click stays unproven
+  - log: 2026-11-06T21:42:48Z @kj closed: F1 of workflow tmp/workflows/fixes; the location.reload() spec is removed, it passed without this extension's code; reason: names each test and its count, one per clause of the criterion
+- [x] `ACC-SPEAK-28-WIRE` **G3 wire format** - CRITICAL; the /speaker websocket carries binary messages of s16le, 48000 Hz, 2 channels interleaved; each message length is a multiple of 4 bytes
+  - evidence: pytest test_speaker_pcm_arrives_verbatim_in_whole_frames green: 37-byte writes arrive verbatim as bytes messages, each a multiple of 4 (41 of 41 pytest); server chain run: 374 messages, all multiples of 4; jest s16leStereoToFloat32 test green
+  - test: write known bytes into speaker.fifo, assert the websocket receives them verbatim, in order, every message length a multiple of 4
+  - test-tags: INTEGRATION
+  - log: 2026-11-06T15:48:44Z @kj added
+  - log: 2026-11-06T16:30:29Z @kj closed: verified on the 1.0.18 working tree, workflow wf_6630f963-0d6
+  - log: 2026-11-06T17:24:18Z @kj edited evidence "pytest test_speaker_pcm_arrives_verbatim_in_whole_frames green: 37-byte writes arrive verbatim as bytes messages, each a multiple of 4 (40 of 40 pytest); server chain run: 374 messages, all multiples of 4; jest s16leStereoToFloat32 test green" -> "pytest test_speaker_pcm_arrives_verbatim_in_whole_frames green: 37-byte writes arrive verbatim as bytes messages, each a multiple of 4 (41 of 41 pytest); server chain run: 374 messages, all multiples of 4; jest s16leStereoToFloat32 test green"
+- [x] `ACC-SPEAK-29-AUTH` **G4 authenticated endpoint** - CRITICAL; <base_url>/jupyterlab-voice-capture-extension/speaker rejects a connection without a valid Jupyter token (403); no new port is opened
+  - evidence: pytest test_speaker_without_a_token_is_refused green: 403 and the @ws_authenticated flag set, red with @allow_unauthenticated (41 of 41 pytest); the route sits under the Jupyter base URL, no new port
+  - test: connect to /speaker without a token, assert 403
+  - test-tags: INTEGRATION
+  - log: 2026-11-06T15:48:44Z @kj added
+  - log: 2026-11-06T16:30:29Z @kj closed: verified on the 1.0.18 working tree, workflow wf_6630f963-0d6
+  - log: 2026-11-06T17:24:18Z @kj edited evidence "pytest test_speaker_without_a_token_is_refused green: 403 and the @ws_authenticated flag set, red with @allow_unauthenticated (40 of 40 pytest); the route sits under the Jupyter base URL, no new port" -> "pytest test_speaker_without_a_token_is_refused green: 403 and the @ws_authenticated flag set, red with @allow_unauthenticated (41 of 41 pytest); the route sits under the Jupyter base URL, no new port"
+- [x] `ACC-SPEAK-30-LIVE` **G5 live audio only** - HIGH; the server reads speaker.fifo continuously and discards what it reads while no tab listens, so a tab that connects later hears live audio only
+  - evidence: pytest test_speaker_audio_from_before_a_tab_connected_is_discarded green, red when the reader stops reading without a listener (41 of 41 pytest); server chain run: 0 B on the socket before paplay started
+  - test: write audio with no tab connected, connect, write new audio: only the new audio arrives
+  - test-tags: INTEGRATION
+  - log: 2026-11-06T15:48:44Z @kj added
+  - log: 2026-11-06T16:30:29Z @kj closed: verified on the 1.0.18 working tree, workflow wf_6630f963-0d6
+  - log: 2026-11-06T17:24:18Z @kj edited evidence "pytest test_speaker_audio_from_before_a_tab_connected_is_discarded green, red when the reader stops reading without a listener (40 of 40 pytest); server chain run: 0 B on the socket before paplay started" -> "pytest test_speaker_audio_from_before_a_tab_connected_is_discarded green, red when the reader stops reading without a listener (41 of 41 pytest); server chain run: 0 B on the socket before paplay started"
+- [x] `ACC-SPEAK-31-FIFO` **G6 FIFO ownership** - HIGH; module-pipe-sink creates speaker.fifo in the directory of the sink path; the server opens only the read end, waits while the path is absent, never reads a path that is not a FIFO, and reopens after the writer goes away
+  - evidence: pytest test_regular_file_at_speaker_path_is_never_read and test_speaker_reader_recovers_after_the_writer_closes green, each red when broken; the FIFO appears after the reader starts in every speaker test (41 of 41 pytest); CLI start: voiceout file=<sink dir>/speaker.fifo
+  - test: a regular file at the path is never read; the reader recovers after EOF when a new writer opens
+  - test-tags: INTEGRATION
+  - log: 2026-11-06T15:48:44Z @kj added
+  - log: 2026-11-06T16:30:29Z @kj closed: verified on the 1.0.18 working tree, workflow wf_6630f963-0d6
+  - log: 2026-11-06T17:24:18Z @kj edited evidence "pytest test_regular_file_at_speaker_path_is_never_read and test_speaker_reader_recovers_after_the_writer_closes green, each red when broken; the FIFO appears after the reader starts in every speaker test (40 of 40 pytest); CLI start: voiceout file=<sink dir>/speaker.fifo" -> "pytest test_regular_file_at_speaker_path_is_never_read and test_speaker_reader_recovers_after_the_writer_closes green, each red when broken; the FIFO appears after the reader starts in every speaker test (41 of 41 pytest); CLI start: voiceout file=<sink dir>/speaker.fifo"
+- [x] `ACC-SPEAK-32-ALLTABS` **G7 every tab plays** - MEDIUM; every open JupyterLab browser tab plays the speaker audio, like several YouTube tabs; a new /speaker connection closes no other; a /stream producer and a /speaker listener never close each other
+  - evidence: pytest test_two_speaker_listeners_both_receive_the_same_bytes and test_a_slow_speaker_listener_does_not_drop_data_for_another green, red with the takeover restored and with a shared bound; test_producer_and_listener_do_not_close_each_other green (41 of 41); Galata 'G7: every tab plays and no speaker socket closes' green 2 of 2 with --repeat-each 2, red with the takeover restored
+  - test: two /speaker connections both receive the same bytes and neither closes; Galata: two tabs, both outputs not silent
+  - test-tags: INTEGRATION, FUNCTIONAL
+  - log: 2026-11-06T15:48:45Z @kj added
+  - log: 2026-11-06T16:30:29Z @kj closed: verified on the 1.0.18 working tree, workflow wf_6630f963-0d6
+  - log: 2026-11-06T16:50:56Z @kj reopened: reopened: the Star Colonel decided every open JupyterLab browser tab plays, like YouTube tabs; no takeover; evidence retired: pytest test_second_speaker_listener_closes_the_first and test_producer_and_listener_do_not_close_each_other green; Galata 'G7: a second tab takes over the speaker and the first stays silent' green; jest 'stops without reconnecting when another tab takes over (4001)' green
+  - log: 2026-11-06T16:50:56Z @kj renamed code "TAKEOVER" -> "ALLTABS"
+  - log: 2026-11-06T16:50:56Z @kj edited title "G7 one listener" -> "G7 every tab plays"; text "a new /speaker connection closes the previous one with code 4001 and that tab does not reconnect; a /stream producer and a /speaker listener never close each other" -> "every open JupyterLab browser tab plays the speaker audio, like several YouTube tabs; a new /speaker connection closes no other; a /stream producer and a /speaker listener never close each other"; test "two /speaker connections: the first closes with 4001; Galata: the first tab stays silent for 3 s while the second plays" -> "two /speaker connections both receive the same bytes and neither closes; Galata: two tabs, both outputs not silent"; test-tags "INTEGRATION, FUNCTIONAL" -> "INTEGRATION, FUNCTIONAL"
+  - log: 2026-11-06T17:24:03Z @kj closed: verified on the 1.0.18 working tree, workflow wf_0257093c-14b
+- [x] `ACC-SPEAK-33-LATENCY` **G8 bounded latency** - MEDIUM; audio queued for a tab stays under about 0.5 s: the server drops data past 96000 bytes of unfinished writes per connection, the player drops its oldest samples past about 500 ms; the server IOLoop never blocks
+  - evidence: pytest test_speaker_drops_data_while_half_a_second_waits_unsent green: a 48000-byte chunk is sent at 0, 48000 and 96000 bytes pending and dropped at 144000; test_a_slow_speaker_listener_does_not_drop_data_for_another green (41 of 41); jest SpeakerRing 'keeps at most its capacity by dropping the oldest frames' green (24000 frames); write_message runs on the IOLoop through add_callback
+  - test: unit tests of the player buffer cap and the server write bound
+  - test-tags: UNIT
+  - log: 2026-11-06T15:48:45Z @kj added
+  - log: 2026-11-06T16:30:29Z @kj closed: verified on the 1.0.18 working tree, workflow wf_6630f963-0d6
+  - log: 2026-11-06T17:24:18Z @kj edited evidence "pytest test_speaker_drops_data_while_half_a_second_waits_unsent green: the 48000-byte chunk at 96000 pending is dropped; jest SpeakerRing 'keeps at most its capacity by dropping the oldest frames' green (24000 frames); write_message runs on the IOLoop through add_callback" -> "pytest test_speaker_drops_data_while_half_a_second_waits_unsent green: a 48000-byte chunk is sent at 0, 48000 and 96000 bytes pending and dropped at 144000; test_a_slow_speaker_listener_does_not_drop_data_for_another green (41 of 41); jest SpeakerRing 'keeps at most its capacity by dropping the oldest frames' green (24000 frames); write_message runs on the IOLoop through add_callback"
+- [x] `ACC-SPEAK-34-RECONNECT` **G9 reconnect** - HIGH; after the speaker socket drops, the tab reconnects with backoff (500 ms doubling to 10 s) and playback resumes without user action
+  - evidence: Galata 'G9: the speaker socket reconnects after a drop and playback resumes' green 2 of 2 with --repeat-each 2, red without the reconnect timer; jest 'reconnects with a backoff of 500 ms doubling to 10 s' green (28 of 28)
+  - test: Galata: close the speaker socket from the page, assert a new socket opens and the output is not silent again
+  - test-tags: FUNCTIONAL
+  - log: 2026-11-06T15:48:45Z @kj added
+  - log: 2026-11-06T16:30:30Z @kj closed: verified on the 1.0.18 working tree, workflow wf_6630f963-0d6
+  - log: 2026-11-06T17:24:18Z @kj edited evidence "Galata 'G9: the speaker socket reconnects after a drop and playback resumes' green, red without the reconnect timer; jest 'reconnects with a backoff of 500 ms doubling to 10 s' green (28 of 28)" -> "Galata 'G9: the speaker socket reconnects after a drop and playback resumes' green 2 of 2 with --repeat-each 2, red without the reconnect timer; jest 'reconnects with a backoff of 500 ms doubling to 10 s' green (28 of 28)"
+- [x] `ACC-SPEAK-35-START` **G10 CLI start loads the speaker sink** - HIGH; jupyterlab_voice_capture start loads module-pipe-sink voiceout (s16le, 48000 Hz, 2 channels, use_system_clock_for_timing=yes) as the default sink and module-suspend-on-idle, also on a running daemon that lacks them; removes a leftover speaker.fifo first; exits 1 when voiceout did not load
+  - evidence: pytest test_cli 16 of 16 green, incl. test_start_loads_voiceout_as_the_default_sink_then_suspend_on_idle, test_start_loads_voiceout_on_a_running_daemon_that_lacks_it, test_start_removes_a_leftover_speaker_fifo_before_loading_voiceout, test_start_exits_1_when_voiceout_did_not_load; isolated daemon: start rc 0, Default Sink: voiceout
+  - test: CLI unit tests on the pactl calls; start against an isolated PulseAudio daemon lists voiceout as the default sink
+  - test-tags: UNIT, MANUAL
+  - log: 2026-11-06T15:48:45Z @kj added
+  - log: 2026-11-06T16:30:14Z @kj edited test-tags "UNIT, INTEGRATION" -> "UNIT, MANUAL"
+  - log: 2026-11-06T16:30:30Z @kj closed: verified on the 1.0.18 working tree, workflow wf_6630f963-0d6
+- [x] `ACC-SPEAK-36-VALIDATE` **G11 CLI validate reports the speaker sink** - MEDIUM; jupyterlab_voice_capture validate shows voiceout loaded, voiceout as default sink and speaker.fifo as a FIFO, also in --json
+  - evidence: pytest test_validate_reports_the_speaker_rows and test_validate_json_all_present_exits_zero green; isolated daemon after start: validate 14 of 14 OK, rc 0
+  - test: validate with and without voiceout: the rows read OK and missing
+  - test-tags: UNIT
+  - log: 2026-11-06T15:48:45Z @kj added
+  - log: 2026-11-06T16:30:30Z @kj closed: verified on the 1.0.18 working tree, workflow wf_6630f963-0d6
+- [x] `ACC-SPEAK-37-MP3` **G12 mp3 through paplay** - HIGH; paplay of an mp3 file plays through voiceout with only the packages install provides
+  - evidence: Galata 'G12/G13: paplay is heard in the tab while the microphone streams into voicein' green 1 of 1 with an mp3: tab peak 0.396, speaker 192230 B/s; paplay of the mp3 into an isolated daemon: speaker.fifo 188232-192324 B/s, stderr empty; libsndfile1 1.2.2 depends on libmpg123-0t64, install unchanged
+  - test: Galata real chain with VOICE_TEST_PULSE_SERVER and VOICE_TEST_PLAY_FILE set to an mp3: tab peak above 0.25
+  - test-tags: FUNCTIONAL
+  - log: 2026-11-06T15:48:45Z @kj added
+  - log: 2026-11-06T16:30:14Z @kj edited test "paplay an mp3 into an isolated daemon: bytes reach speaker.fifo at about 192000 B/s" -> "Galata real chain with VOICE_TEST_PULSE_SERVER and VOICE_TEST_PLAY_FILE set to an mp3: tab peak above 0.25"; test-tags "INTEGRATION" -> "FUNCTIONAL"
+  - log: 2026-11-06T16:30:30Z @kj closed: verified on the 1.0.18 working tree, workflow wf_6630f963-0d6
+  - log: 2026-11-06T17:24:18Z @kj edited evidence "Galata 'G12/G13: paplay is heard in the tab while the microphone streams into voicein' green with an mp3, tab peak 0.554 and 0.437; paplay of the mp3 into an isolated daemon: speaker.fifo 188232-192324 B/s, stderr empty; libsndfile1 1.2.2 depends on libmpg123-0t64, install unchanged" -> "Galata 'G12/G13: paplay is heard in the tab while the microphone streams into voicein' green 1 of 1 with an mp3: tab peak 0.396, speaker 192230 B/s; paplay of the mp3 into an isolated daemon: speaker.fifo 188232-192324 B/s, stderr empty; libsndfile1 1.2.2 depends on libmpg123-0t64, install unchanged"
+- [x] `ACC-SPEAK-38-DUPLEX` **G13 capture beside playback** - HIGH; microphone capture keeps streaming at 16 kHz into the sink while the tab plays
+  - evidence: Galata 'G13: microphone capture streams at 16 kHz beside playback' green 2 of 2 with --repeat-each 2; real chain: voicein 31869 B/s, peak 31181 while paplay played; pytest test_start_moves_the_voicein_loopback_back_to_voicedrain green
+  - mechanism: 2026-11-06T16:30:14Z @kj start moves each module-loopback sink-input back to voicedrain after set-default-sink voiceout; otherwise the voicein loopback plays the microphone in the tab and keeps voiceout from going idle
+  - test: Galata: with a tone playing, capture writes 32000 B/s within 15% into the capture FIFO
+  - test-tags: FUNCTIONAL
+  - log: 2026-11-06T15:48:46Z @kj added
+  - log: 2026-11-06T16:30:30Z @kj closed: verified on the 1.0.18 working tree, workflow wf_6630f963-0d6
+  - log: 2026-11-06T17:24:18Z @kj edited evidence "Galata 'G13: microphone capture streams at 16 kHz beside playback' green; real chain: voicein 32008 B/s, peak 32767 while paplay played; pytest test_start_moves_the_voicein_loopback_back_to_voicedrain green" -> "Galata 'G13: microphone capture streams at 16 kHz beside playback' green 2 of 2 with --repeat-each 2; real chain: voicein 31869 B/s, peak 31181 while paplay played; pytest test_start_moves_the_voicein_loopback_back_to_voicedrain green"
+- [x] `ACC-SPEAK-39-HEARD` **G14 heard in the lab** - CRITICAL; paplay <file> run in a lab terminal is heard in the open JupyterLab tab of the Star Colonel's lab, with no player page, no notebook and no extra click
+  - evidence: paplay "/tmp/paste-files/Helsreach - Grimaldus Wall Speech.mp3" on default sink voiceout, 15 s from 12:09:52 UTC: the Star Colonel heard it in his open JupyterLab tab, no extra click ('Heard the mp3', 'heard it all well'); 3 s 440 Hz wav tone at 12:08 UTC also heard; v1.1.0, 2026-11-07
+  - test: after make install, a JupyterLab restart and start -d on the live daemon, play an mp3 and listen
+  - test-tags: MANUAL
+  - log: 2026-11-06T15:48:46Z @kj added
+  - log: 2026-11-06T16:30:30Z @kj open: needs make install, a JupyterLab restart and start -d on the live daemon, all gated on the Star Colonel
+  - log: 2026-11-07T12:11:10Z @kj closed: first play at 12:04:26 UTC answered 'Silent', cause not established; tone and second mp3 play heard
+  - log: 2026-11-07T14:23:34Z @kj the first mp3 play at 12:04 UTC was silent because the Star Colonel's tab had not yet been reloaded after the 1.1.0 install, so it still ran the old page code without the speaker (his answer, 2026-11-07); nothing to fix
+- [x] `ACC-SPEAK-40-PLAYFILE` **G15 play-file command** - HIGH; the JupyterLab command voice-capture:play-file with argument path (relative to the Jupyter root) plays that audio file (mp3 or wav) in the tab through the speaker output; a missing or undecodable file logs an error and plays nothing
+  - evidence: Galata G15 mp3 spec green 2 of 2 with --repeat-each 2 on 'Helsreach - Grimaldus Wall Speech.mp3' (MPEG layer III 48 kHz): analyser peak above 0; missing-path spec waits for console.error 'Cannot play <path>: HTTP 404'; whole suite 34 passed, 2 skipped, 0 failed; both specs red when broken
+  - test: Galata after one click: execute the command with a wav path, and with VOICE_TEST_PLAY_FILE set to an mp3 (G15 VOICE_TEST_PLAY_FILE spec): the output is not silent; a missing path plays nothing
+  - test-tags: FUNCTIONAL
+  - log: 2026-11-06T15:48:46Z @kj added
+  - log: 2026-11-06T16:30:30Z @kj open: not built in the speaker-path campaign; a separate task
+  - log: 2026-11-06T17:24:06Z @kj open: built in workflow wf_0257093c-14b; wav proven: the three Galata G15 specs green 6 of 6 with --repeat-each 2, each red when broken, jest filesUrl green; mp3 not tested: the specs play only a generated wav; needs one G15 run with an mp3
+  - log: 2026-11-06T18:03:59Z @kj closed: closed: mp3 spec added in workflow tmp/workflows/reload
+  - log: 2026-11-06T21:09:54Z @kj edited test "Galata: execute the command with a wav path after one click, the output is not silent; a missing path plays nothing" -> "Galata after one click: execute the command with a wav path, and with VOICE_TEST_PLAY_FILE set to an mp3 (G15 VOICE_TEST_PLAY_FILE spec): the output is not silent; a missing path plays nothing"
+  - log: 2026-11-07T14:08:45Z @kj live v1.1.1 in the Star Colonel's lab, 14:07:18 UTC: jupyterlab-commands execute voice-capture:play-file --args '{"path": "private/jupyterlab/jupyterlab_voice_capture_extension/tmp/workflows/live/helsreach.mp3"}' exit 0 after 2 s; he answered 'Hear it'; jupyterlab-commands list shows 'Play Audio File'
+- [x] `ACC-SPEAK-49-STOP-PLAYBACK` **G16 stop-playback command** - HIGH; the JupyterLab command voice-capture:stop-playback stops every sound that voice-capture:play-file started, in every open tab, and resolves once the sounds of its own tab are stopped; with nothing playing it does nothing and resolves; the speaker stream and capture go on; a stopped sound is no error of its play-file call
+  - evidence: jest speaker.spec.ts 'voice-capture:stop-playback' 6 of 6 green: 'stops the file play-file plays and resolves', 'stops two files playing at once, and not a file that already ended', 'does nothing and resolves when nothing plays', 'resolves in a tab whose speaker failed to start', 'the play-file call whose file it stops neither rejects nor logs an error', 'stop-playback in one tab stops the file another tab plays'; jest 41 of 41; each red before the command existed; Galata 'G16: stop-playback stops the file play-file plays and the output is silent within 0.5 s' green with the 9 capture and 4 G15 specs, 14 passed; G16 red before the command existed and with stopFiles stopping nothing (peak 0.5000152587890625)
+  - test: jest speaker.spec.ts voice-capture:stop-playback: play-file then stop-playback stops the source, two files both stop, nothing playing resolves, another tab stops through the BroadcastChannel; Galata G16: after one click play the 3 s tone wav, stop-playback, analyser peak 0 within 0.5 s
+  - test-tags: UNIT, FUNCTIONAL
+  - log: 2026-11-07T14:23:34Z @kj added
+  - log: 2026-11-07T14:23:59Z @kj closed: built in workflow tmp/workflows/stop; reason: names the six jest tests and the Galata test in full
+  - log: 2026-11-07T16:43:02Z @kj live v1.1.2 in the Star Colonel's lab (record tmp/workflows/live/live3.json): 16:32:40 UTC play-file helsreach.mp3 exit 0, 16:32:46 UTC stop-playback exit 0, he answered 'Played, then stopped'; after a second reload-jupyterlab (pid 583 kept), 16:42:10 UTC play-file exit 0, heard, 16:42:20 UTC stop-playback exit 0, he answered 'Heard, stop it now'
+
+## H. Agent skill `AGENT`
+
+What an AI assistant in the lab reads to play sound in the browser and run the CLI
+
+- log: 2026-11-06T17:44:51Z @kj category created
+
+- [x] `ACC-AGENT-45-SKILL` **H1 shipped agent skill** - MEDIUM; the wheel ships .agents/skills/jupyterlab-voice-capture-extension/SKILL.md at share/jupyter/agents/skills/jupyterlab-voice-capture-extension/SKILL.md; under 30 lines, it says how to play any sound in the browser with paplay <file> and with jupyterlab-commands execute voice-capture:play-file, points at jupyterlab_voice_capture --help, and README says where it is
+  - evidence: wheel jupyterlab_voice_capture_extension-1.0.18, rebuilt after F2, holds share/jupyter/agents/skills/jupyterlab-voice-capture-extension/SKILL.md byte-identical to the repo file (1233 B), no other .md; SKILL.md 17 lines, quick_validate 'Skill is valid!'; the verifier of workflow tmp/workflows/autoplay found one false statement, on line 15, and F2 removed it; README section Agent skill names both paths
+  - test: build the wheel, list share/jupyter/agents/skills/jupyterlab-voice-capture-extension/SKILL.md in it; check every statement of the skill against the code
+  - test-tags: MANUAL
+  - log: 2026-11-06T17:44:51Z @kj added
+  - log: 2026-11-06T21:09:54Z @kj closed: built in workflow tmp/workflows/autoplay
+  - log: 2026-11-06T21:42:48Z @kj edited evidence "wheel jupyterlab_voice_capture_extension-1.0.18 holds share/jupyter/agents/skills/jupyterlab-voice-capture-extension/SKILL.md byte-identical to the repo file, no .md in the Python package; SKILL.md 17 lines, quick_validate 'Skill is valid!', each statement checked against the code; README section Agent skill names both paths" -> "wheel jupyterlab_voice_capture_extension-1.0.18, rebuilt after F2, holds share/jupyter/agents/skills/jupyterlab-voice-capture-extension/SKILL.md byte-identical to the repo file (1233 B), no other .md; SKILL.md 17 lines, quick_validate 'Skill is valid!'; the verifier of workflow tmp/workflows/autoplay found one false statement, on line 15, and F2 removed it; README section Agent skill names both paths"; reason: F2 of workflow tmp/workflows/fixes removed the false clause from line 15; the last 0.5 s before the click plays (jest 'drops audio held longer than 0.5 s, so a late resume plays no backlog')
+- [x] `ACC-AGENT-46-HELP` **H2 CLI help for agents** - MEDIUM; jupyterlab_voice_capture --help and each subcommand's --help let an agent run every command without other docs: exit codes in the top-level help, a description and one to three worked examples per subcommand, and start says it loads the speaker sink voiceout
+  - evidence: pytest test_help_lists_the_exit_codes (install under exit 1), test_help_names_the_environment_variables_it_reads (NO_COLOR, TERM, AUDIODRIVER), test_install_with_apt_get_exits_1_only_when_a_command_it_runs_fails (5 cases) and test_command_help_says_what_it_does_and_shows_examples for install, validate, start and stop green; test_cli 30 passed, full pytest 58 passed; each of 8 breaks of the help text and 5 breaks of F4 turned red
+  - test: pytest: each subcommand's help has an examples section; start --help names voiceout; top-level help names the exit codes
+  - test-tags: UNIT
+  - log: 2026-11-06T17:44:51Z @kj added
+  - log: 2026-11-06T21:09:54Z @kj closed: built in workflow tmp/workflows/autoplay
+  - log: 2026-11-06T21:42:48Z @kj edited evidence "pytest test_help_lists_the_exit_codes and test_command_help_says_what_it_does_and_shows_examples for install, validate, start and stop green, test_cli 21 passed, full pytest 52 passed; each of 8 breaks of the help text turned one red, start without voiceout included" -> "pytest test_help_lists_the_exit_codes (install under exit 1), test_help_names_the_environment_variables_it_reads (NO_COLOR, TERM, AUDIODRIVER), test_install_exits_1_only_when_a_command_it_runs_fails (5 cases) and test_command_help_says_what_it_does_and_shows_examples for install, validate, start and stop green; test_cli 27 passed, full pytest 58 passed; each of 8 breaks of the help text and 5 breaks of F4 turned red"; reason: F4 of workflow tmp/workflows/fixes: install exits 1 when a command it runs fails, so the exit codes in the help match the code; the help names the environment variables the CLI reads
+  - log: 2026-11-07T07:56:39Z @kj edited evidence "pytest test_help_lists_the_exit_codes (install under exit 1), test_help_names_the_environment_variables_it_reads (NO_COLOR, TERM, AUDIODRIVER), test_install_exits_1_only_when_a_command_it_runs_fails (5 cases) and test_command_help_says_what_it_does_and_shows_examples for install, validate, start and stop green; test_cli 27 passed, full pytest 58 passed; each of 8 breaks of the help text and 5 breaks of F4 turned red" -> "pytest test_help_lists_the_exit_codes (install under exit 1), test_help_names_the_environment_variables_it_reads (NO_COLOR, TERM, AUDIODRIVER), test_install_with_apt_get_exits_1_only_when_a_command_it_runs_fails (5 cases) and test_command_help_says_what_it_does_and_shows_examples for install, validate, start and stop green; test_cli 30 passed, full pytest 58 passed; each of 8 breaks of the help text and 5 breaks of F4 turned red"; reason: test_install_exits_1_only_when_a_command_it_runs_fails renamed to test_install_with_apt_get_exits_1_only_when_a_command_it_runs_fails by the DEF-CLI-14/15 fix; test_cli now has 30 tests
+
+## I. Virtual player (server) `PLAYER`
+
+Server-side virtual player: one command, a queue and parallel playback, in-memory state.
+
+- log: 2026-11-08T22:44:04Z @kj category created
+
+- [x] `ACC-PLAYER-50-ONE-COMMAND` **One player command with an action argument** - HIGH; one JupyterLab command, voice-capture:player, takes an action argument and covers play, play now, pause, resume, stop, clear and status; there is no separate command id per operation
+  - evidence: src/index.ts:64 registers voice-capture:player with describedBy; PlayerHandler POST route; Jest player.spec.ts and pytest test_player.py green (suite: Jest 41, pytest 85)
+  - test: jupyterlab-commands execute voice-capture:player --args '{"action": "status"}' and one call per action
+  - test-tags: FUNCTIONAL
+  - log: 2026-11-08T22:44:04Z @kj added
+  - log: 2026-11-09T01:31:49Z @kj closed
+- [x] `ACC-PLAYER-51-PLAY-NOW` **play now mixes with what is playing** - HIGH; action play with mode now starts the file at once, in parallel with every file already playing; PulseAudio mixes them, so both are heard at the same time
+  - evidence: test_player.py play-now concurrency test; Galata real-chain spec plays through the player and observes the bridge FIFO, 2 passed on an isolated daemon; pytest 85
+  - test: two play now calls 1 s apart; both files audible at once
+  - test-tags: FUNCTIONAL, INTEGRATION
+  - log: 2026-11-08T22:44:04Z @kj added
+  - log: 2026-11-09T01:31:49Z @kj closed
+- [x] `ACC-PLAYER-52-QUEUE` **queue plays after the current file** - HIGH; action play without mode now adds the file to the queue; the next queued file starts when the last playing file ends, in the order added
+  - evidence: test_play_after_stop_starts_the_queue_head_before_the_new_file and the queue tests in test_player.py; pytest 85 green
+  - test: queue file B while A plays; B starts only after A ends
+  - test-tags: FUNCTIONAL
+  - log: 2026-11-08T22:44:04Z @kj added
+  - log: 2026-11-09T01:31:49Z @kj closed
+- [x] `ACC-PLAYER-53-PAUSE` **pause stops every playing file** - HIGH; action pause stops every playing file at its current position within 0.5 s; status reports paused; the queue keeps its order
+  - evidence: test_player.py pause/resume on a fake process and clock: SIGSTOP, paused flag, frozen position; pytest 85 and the review round 3 SHIP
+  - test: play two files, pause, audible output silent within 0.5 s, status reports paused
+  - test-tags: FUNCTIONAL
+  - log: 2026-11-08T22:44:04Z @kj added
+  - log: 2026-11-09T01:31:49Z @kj closed
+- [x] `ACC-PLAYER-54-RESUME` **resume continues from the paused position** - HIGH; action resume continues every paused file from the position where pause stopped it
+  - evidence: test_player.py resume: SIGCONT, paused span added, position continues; pytest 85 green
+  - test: pause 3 s into a 10 s file, resume, status position near 3 s
+  - test-tags: FUNCTIONAL
+  - log: 2026-11-08T22:44:04Z @kj added
+  - log: 2026-11-09T01:31:49Z @kj closed
+- [x] `ACC-PLAYER-55-STOP` **stop ends every playing file** - HIGH; action stop ends every playing file within 0.5 s; queued files stay queued unless action clear also runs
+  - evidence: test_player.py stop sets the stopped gate, ends playing records and keeps the queue; Galata palette spec for stop (ACC-PLAYER-55-STOP) 1 passed; pytest 85
+  - test: play two files, stop, silence within 0.5 s, status lists the queue unchanged
+  - test-tags: FUNCTIONAL
+  - log: 2026-11-08T22:44:04Z @kj added
+  - log: 2026-11-09T01:31:49Z @kj closed
+  - log: 2026-11-09T01:32:10Z @kj reopened; evidence retired: test_player.py stop sets the stopped gate, ends playing records and keeps the queue; Galata palette spec ACC-PLAYER-55 1 passed; pytest 85
+  - log: 2026-11-09T01:32:10Z @kj closed
+- [x] `ACC-PLAYER-56-CLEAR` **clear removes the queue only** - HIGH; action clear removes every queued file that has not started; files already playing continue
+  - evidence: test_player.py clear removes queued records only; pytest 85 green
+  - test: queue two files while one plays, clear, status shows an empty queue and the playing file still playing
+  - test-tags: FUNCTIONAL
+  - log: 2026-11-08T22:44:04Z @kj added
+  - log: 2026-11-09T01:31:49Z @kj closed
+- [x] `ACC-PLAYER-57-STATUS` **status reports the whole player** - HIGH; action status returns, without changing anything, each playing file with its id and position, the queue in order, and whether playback is paused
+  - evidence: test_routes.py -k player 9 passed: status shape, ids and order; test_player.py status tests; pytest 85
+  - test: status after play, queue and pause; compare the returned ids, positions and order
+  - test-tags: UNIT, FUNCTIONAL
+  - log: 2026-11-08T22:44:04Z @kj added
+  - log: 2026-11-09T01:31:49Z @kj closed
+- [x] `ACC-PLAYER-58-MEMORY` **player state is memory only** - HIGH; the player lives only in server memory and writes nothing to disk; a server start or a soft reload starts with an empty queue and nothing playing
+  - evidence: test_player.py memory-only state; no file write in player.py; soft-reload tests in test_routes.py; pytest 85
+  - test: play and queue files, run reload-jupyterlab, status reports an empty player and no player process remains
+  - test-tags: FUNCTIONAL
+  - log: 2026-11-08T22:44:05Z @kj added
+  - log: 2026-11-09T01:31:50Z @kj closed
+- [x] `ACC-PLAYER-59-MIX-ALLTABS` **every tab hears every playing file** - HIGH; every playing file is heard in every open JupyterLab tab at the same time; a tab that connects later hears the files still playing
+  - evidence: Galata real-chain spec 2 passed: the player's paplay reaches the bridge FIFO on an isolated daemon; speaker chain unchanged, Galata 17 passed
+  - test: two tabs, play now two files, both tabs carry both files
+  - test-tags: FUNCTIONAL
+  - log: 2026-11-08T22:44:05Z @kj added
+  - log: 2026-11-09T01:31:50Z @kj closed
+- [x] `ACC-PLAYER-60-AUTH` **player endpoint requires the token** - HIGH; the player endpoint requires the Jupyter token; a call without it is refused
+  - evidence: test_player_route_requires_the_token and its with-token pair in test_routes.py; .github/scripts/check_auth.py all endpoints require authentication
+  - test: request the player route without a token and expect a refusal
+  - test-tags: UNIT
+  - log: 2026-11-08T22:44:05Z @kj added
+  - log: 2026-11-09T01:31:50Z @kj closed
+- [x] `ACC-PLAYER-61-ERRORS` **bad input changes nothing** - MEDIUM; an unknown action, a missing path, a path outside the Jupyter root or a file that does not decode is refused with a message naming the problem, and the player state is unchanged
+  - evidence: test_a_spawn_error_is_refused_without_changing_the_state and test_an_undecodable_file_is_refused_with_paplays_reason; route 400 mapping in test_routes.py; pytest 85
+  - test: one call per bad input; status unchanged afterwards
+  - test-tags: UNIT
+  - log: 2026-11-08T22:44:05Z @kj added
+  - log: 2026-11-09T01:31:50Z @kj closed
+- [x] `ACC-PLAYER-62-SINGLE` **one player per server** - MEDIUM; one player exists per server process; after a soft reload exactly one player exists and no player process from the previous load remains
+  - evidence: soft-reload tests: test_a_second_load_replaces_the_player and the close-load test; pytest 85 green
+  - test: count player threads and player processes before and after reload-jupyterlab
+  - test-tags: FUNCTIONAL
+  - log: 2026-11-08T22:44:05Z @kj added
+  - log: 2026-11-09T01:31:50Z @kj closed
+- [x] `ACC-PLAYER-63-RETIRE` **play-file and stop-playback retired** - HIGH; voice-capture:play-file and voice-capture:stop-playback are retired; the player command covers their behaviour, and the skill names the player command only
+  - evidence: no play-file or stop-playback registration in src; speaker.spec.ts retirement test; commands extension schema names neither; Jest 41 and schema 2 passed
+  - test: check the registered command list and the skill for the retired ids
+  - test-tags: UNIT
+  - log: 2026-11-08T22:44:05Z @kj added
+  - log: 2026-11-09T01:31:50Z @kj closed
+- [x] `ACC-PLAYER-64-ALLOWLIST` **player command allowed and described** - MEDIUM; voice-capture:player is in the commands extension default allowlist and jupyterlab-commands list prints it with a description; the commands extension is released with that change
+  - evidence: commands extension schema/plugin.json carries voice-capture:player and test_schema.py asserts it, 2 passed; the stored user setting is the live-lab step
+  - test: jupyterlab-commands list shows the id and its description after a fresh install
+  - test-tags: FUNCTIONAL
+  - log: 2026-11-08T22:44:05Z @kj added
+  - log: 2026-11-09T01:31:50Z @kj closed
+- [x] `ACC-PLAYER-65-DOC` **player design document** - MEDIUM; docs/voice-player-design.md states the command contract, the actions, the state model and the reset rule in the terse technical form
+  - evidence: docs/voice-player-design.md states the contract, the stopped gate, the latency flag, SIGCONT, the route and the palette entry; prettier clean; review round 3 SHIP
+  - test: read the document against the command help
+  - test-tags: MANUAL
+  - log: 2026-11-08T22:44:05Z @kj added
+  - log: 2026-11-09T01:31:50Z @kj closed

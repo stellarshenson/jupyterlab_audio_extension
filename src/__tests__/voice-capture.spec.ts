@@ -1,4 +1,21 @@
+import plugin from '../index';
+
 import { VoiceCapture } from '../voice-capture';
+
+// The plugin's commands without the speaker, the status widget and the modules Jest cannot
+// load, which the plugin imports only for their tokens.
+jest.mock('@jupyterlab/apputils', () => ({}));
+jest.mock('@jupyterlab/statusbar', () => ({}));
+jest.mock('../speaker', () => ({
+  Speaker: class {
+    async start(): Promise<void> {}
+  }
+}));
+jest.mock('../status', () => ({
+  VoiceStatus: class {
+    constructor(readonly model: VoiceCapture) {}
+  }
+}));
 
 /**
  * Browser-side lifecycle tests. The Web Audio + WebSocket APIs are not implemented by
@@ -90,6 +107,22 @@ class FakeWebSocket {
   }
 }
 
+/** jsdom has no BroadcastChannel: delivers to every other open channel of the same name. */
+class FakeBroadcastChannel {
+  static instances: FakeBroadcastChannel[] = [];
+  onmessage: ((ev: { data: unknown }) => void) | null = null;
+  constructor(readonly name: string) {
+    FakeBroadcastChannel.instances.push(this);
+  }
+  postMessage(data: unknown): void {
+    for (const other of FakeBroadcastChannel.instances) {
+      if (other !== this && other.name === this.name) {
+        queueMicrotask(() => other.onmessage?.({ data }));
+      }
+    }
+  }
+}
+
 const SETTINGS = {
   wsUrl: 'ws://localhost/',
   baseUrl: 'http://localhost/',
@@ -107,6 +140,8 @@ beforeEach(() => {
   (globalThis as any).AudioContext = FakeAudioContext as any;
   (globalThis as any).AudioWorkletNode = FakeWorkletNode as any;
   (globalThis as any).WebSocket = FakeWebSocket as any;
+  FakeBroadcastChannel.instances = [];
+  (globalThis as any).BroadcastChannel = FakeBroadcastChannel as any;
   (globalThis as any).URL.createObjectURL = jest.fn(() => 'blob:fake');
   (globalThis as any).URL.revokeObjectURL = jest.fn();
 });
@@ -350,5 +385,158 @@ describe('VoiceCapture', () => {
     } finally {
       jest.useRealTimers();
     }
+  });
+});
+
+const ENABLE = 'voice-capture:enable';
+const DISABLE = 'voice-capture:disable';
+
+/** Activates the plugin with a status bar only: runs its commands, reads its model's state. */
+function activatePlugin(): {
+  execute: (id: string) => Promise<void>;
+  state: () => string;
+} {
+  const commands = new Map<string, any>();
+  let status: any;
+  plugin.activate(
+    {
+      commands: {
+        addCommand: (id: string, options: any) => commands.set(id, options)
+      },
+      serviceManager: { serverSettings: SETTINGS }
+    } as any,
+    null,
+    {
+      registerStatusItem: (_id: string, options: any) => (status = options.item)
+    } as any,
+    null
+  );
+  return {
+    execute: async (id: string) => commands.get(id).execute({}),
+    state: () => status.model.state
+  };
+}
+
+describe('voice-capture:enable and voice-capture:disable', () => {
+  it('enable resolves once streaming, and a second enable does nothing', async () => {
+    const lab = activatePlugin();
+    let resolved = false;
+    const enabled = lab.execute(ENABLE).then(() => (resolved = true));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(lab.state()).toBe('connecting');
+    expect(resolved).toBe(false);
+
+    const socket = FakeWebSocket.last;
+    socket._open();
+    await enabled;
+    expect(lab.state()).toBe('streaming');
+
+    await lab.execute(ENABLE);
+    expect(lab.state()).toBe('streaming');
+    expect((navigator as any).mediaDevices.getUserMedia).toHaveBeenCalledTimes(
+      1
+    );
+    expect(FakeWebSocket.last).toBe(socket);
+    await lab.execute(DISABLE);
+  });
+
+  it('enable rejects with the error message: a denied microphone at once, an unreachable endpoint at the connect deadline', async () => {
+    jest.useFakeTimers();
+    try {
+      (navigator as any).mediaDevices.getUserMedia = jest
+        .fn()
+        .mockRejectedValue(
+          Object.assign(new Error('denied'), { name: 'NotAllowedError' })
+        );
+      const denied = activatePlugin();
+      await expect(denied.execute(ENABLE)).rejects.toThrow(
+        'Microphone permission denied.'
+      );
+      expect(denied.state()).toBe('error');
+
+      (navigator as any).mediaDevices.getUserMedia = jest
+        .fn()
+        .mockResolvedValue(stream);
+      const unreachable = activatePlugin();
+      const rejected = expect(unreachable.execute(ENABLE)).rejects.toThrow(
+        'Voice-capture endpoint unreachable'
+      );
+      await jest.advanceTimersByTimeAsync(10000);
+      await rejected;
+      await unreachable.execute(DISABLE);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('enable rejects at the connect deadline while the permission prompt is unanswered, and Allow later still starts capture', async () => {
+    jest.useFakeTimers();
+    try {
+      let grant: (s: FakeStream) => void = () => undefined;
+      (navigator as any).mediaDevices.getUserMedia = jest.fn(
+        () => new Promise(resolve => (grant = resolve))
+      );
+      const lab = activatePlugin();
+      const unanswered =
+        'Answer the microphone permission prompt in the JupyterLab tab, then run voice-capture:enable again.';
+
+      // A first enable, then a second one while the prompt is still open.
+      for (let run = 0; run < 2; run++) {
+        let message = '';
+        void lab.execute(ENABLE).catch((err: Error) => (message = err.message));
+        await jest.advanceTimersByTimeAsync(10000);
+        expect(message).toBe(unanswered);
+        expect(lab.state()).toBe('connecting');
+      }
+
+      grant(stream);
+      await jest.advanceTimersByTimeAsync(0);
+      FakeWebSocket.last._open();
+      expect(lab.state()).toBe('streaming');
+      await lab.execute(DISABLE);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('disable stops capture, and a second disable does nothing', async () => {
+    const lab = activatePlugin();
+    await lab.execute(DISABLE);
+    expect(lab.state()).toBe('idle');
+    expect((navigator as any).mediaDevices.getUserMedia).not.toHaveBeenCalled();
+
+    const enabled = lab.execute(ENABLE);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    FakeWebSocket.last._open();
+    await enabled;
+
+    await lab.execute(DISABLE);
+    expect(lab.state()).toBe('idle');
+    expect(stream.getTracks()[0].stopped).toBe(true);
+    expect(FakeWebSocket.last.readyState).toBe(FakeWebSocket.CLOSED);
+
+    await lab.execute(DISABLE);
+    expect(lab.state()).toBe('idle');
+    expect((navigator as any).mediaDevices.getUserMedia).toHaveBeenCalledTimes(
+      1
+    );
+  });
+
+  it('disable in one tab stops capture in another tab', async () => {
+    const tabA = activatePlugin();
+    const tabB = activatePlugin();
+    const enabled = tabA.execute(ENABLE);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const socket = FakeWebSocket.last;
+    socket._open();
+    await enabled;
+    expect(tabA.state()).toBe('streaming');
+
+    await tabB.execute(DISABLE);
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(tabA.state()).toBe('idle');
+    expect(stream.getTracks()[0].stopped).toBe(true);
+    expect(socket.readyState).toBe(FakeWebSocket.CLOSED);
   });
 });

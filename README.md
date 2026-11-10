@@ -17,11 +17,14 @@ The container has no capture device; the browser does. This extension bridges th
 - **Capture** - a microphone toggle in the status bar calls `getUserMedia`; the AudioContext resamples to 16 kHz; an AudioWorklet downmixes to mono and encodes signed 16-bit little-endian PCM off the UI thread
 - **Transport** - 20 ms PCM frames (640 bytes) are sent as binary websocket messages to `…/jupyterlab-voice-capture-extension/stream`, which lives under the Jupyter base URL and inherits Jupyter token auth - no new port is opened
 - **Sink** - the server handler writes each frame, in order, to a FIFO (default `/run/voice/pulseaudio.fifo`); the PulseAudio reader creates the pipe (`module-pipe-source` refuses a pre-existing one), so the handler attaches as writer, waits for the pipe to appear, and tolerates a not-yet-attached reader without blocking the server
+- **Speaker** - a program in the container that plays to the default PulseAudio sink (`voiceout`, a `module-pipe-sink`) writes s16le, 48 kHz, stereo PCM to `speaker.fifo` in the directory of the sink FIFO (default `/run/voice/speaker.fifo`); a server thread reads it and sends it as binary websocket messages to `…/jupyterlab-voice-capture-extension/speaker`, under the same token auth; an AudioWorklet in each open JupyterLab tab plays it. While no tab listens, the server discards what it reads, so a tab hears live audio only
 
 Chain: browser mic → AudioWorklet (16 kHz mono s16le) → websocket → server handler → FIFO → (PulseAudio + SoX, out of scope) → terminal app.
 
+Speaker chain: program in the container → (PulseAudio `voiceout`, out of scope) → `speaker.fifo` (48 kHz stereo s16le) → server reader → websocket → AudioWorklet → tab audio output.
+
 > [!IMPORTANT]
-> Out of scope - the extension does not manage PulseAudio, invoke SoX or any recorder, or perform speech-to-text; its responsibility ends at delivering correct PCM to the FIFO.
+> Out of scope - the extension does not manage PulseAudio, invoke SoX or any recorder, or perform speech-to-text; its responsibility ends at delivering correct PCM to the FIFO, and for playback it begins at reading `speaker.fifo` or playing the file that `voice-capture:player` names.
 
 ## Requirements
 
@@ -37,11 +40,11 @@ pip install jupyterlab-voice-capture-extension
 ## Dependencies
 
 - **Python**: `jupyter_server` and `traitlets`, installed automatically with the package
-- **System** (only for the full voice chain into a terminal app): PulseAudio + SoX. Provision and verify them with the bundled CLI:
+- **System** (only for the full voice chain into a terminal app and for the speaker): PulseAudio + SoX for the voice chain; the speaker needs only PulseAudio (`paplay` comes from `pulseaudio-utils`). Provision and verify them with the bundled CLI:
 
 ```bash
 jupyterlab_voice_capture install    # apt packages + /run/voice dir + client.conf + Jupyter config line (does NOT start the daemon)
-jupyterlab_voice_capture start -d   # start the PulseAudio daemon + pipe-source + voicedrain loopback that keeps it reading (run after install and each restart)
+jupyterlab_voice_capture start -d   # start the PulseAudio daemon + pipe-source + voicedrain loopback that keeps it reading + voiceout pipe-sink as the default sink (run after install and each restart)
 jupyterlab_voice_capture validate   # check every component, print what to fix (--json for machine output)
 jupyterlab_voice_capture stop       # kill the PulseAudio daemon
 ```
@@ -55,6 +58,15 @@ See [docs/jupyterlab-enable-claude-voice.md](docs/jupyterlab-enable-claude-voice
 - Click again to stop - capture tracks are released and the browser indicator clears
 - In the Error state (blinking icon) a click disconnects and returns the control to Disconnected; click once more to start capture again
 - Only one tab streams at a time: starting capture in a second tab takes over and stops the first
+- Playback is always on, with no on/off control and no setting: every tab starts it when JupyterLab loads, and sound that a program in the container plays to the default PulseAudio sink (for example `paplay <file>`) is heard in the tab
+- Sound plays as soon as it arrives in a browser that allows sound without a gesture (Chrome with the autoplay policy no-user-gesture-required), and in any browser after any click or key press anywhere in the tab, panels and frames included. In a browser that blocks autoplay, a tab nobody has clicked or typed in since it loaded may stay silent; sound sent more than 0.5 s before the first click or key press is dropped
+- Every open JupyterLab browser tab plays the sound; opening another tab stops none of them
+- The command `voice-capture:player` drives the container player and returns its state: `play` with a `path` relative to the Jupyter root queues an mp3 or wav file and starts it when nothing plays, `mode: "now"` starts it at once, mixed with every file already playing, `pause` and `resume` stop and continue every playing file at its position, `stop` ends every playing file and keeps the queue, `clear` removes the queue, and `status` reports `paused`, `stopped`, `playing` with ids and positions, and `queue`. A missing or undecodable file, a path outside the root or an unknown action is refused with the reason and changes nothing. The palette entry **Stop All Audio** in category **Voice Capture** runs the command with `{"action": "stop"}`. From a terminal: `jupyterlab-commands execute voice-capture:player --args '{"action": "play", "path": "<file>"}'`, which runs only after `voice-capture:player` is added to the `allowedCommands` setting of `@stellarshenson/jupyterlab-commands-extension:plugin`
+- The commands `voice-capture:enable` (label **Enable Voice Capture**) and `voice-capture:disable` (label **Disable Voice Capture**) start capture in the tab that runs `voice-capture:enable` and stop capture in every open tab, for terminal programs such as Claude Code `/voice`. `voice-capture:enable` returns once capture streams, fails with the error message (for example `Microphone permission denied.`) when capture turns to Error, and does nothing when capture already streams; `voice-capture:disable` does nothing when capture is already off. From a terminal: `jupyterlab-commands execute voice-capture:enable`, which, like `voice-capture:player`, runs only after the command is added to the `allowedCommands` setting
+
+## Agent skill
+
+The skill in `.agents/skills/jupyterlab-voice-capture-extension` tells an AI agent how to play a sound in the JupyterLab browser tab and where the help of `jupyterlab_voice_capture` is. `pip install` puts a copy in `<sys.prefix>/share/jupyter/agents/skills/jupyterlab-voice-capture-extension`.
 
 ## Configuration
 

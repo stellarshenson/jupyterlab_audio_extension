@@ -16,5 +16,8 @@ c.ServerApp.port = int(os.environ.get("JUPYTER_TEST_PORT") or "8888")
 # The specs create this FIFO and read it, standing in for PulseAudio's module-pipe-source.
 c.VoiceCapture.sink_path = os.environ["VOICE_TEST_SINK"]
 
+# /files/ from the test root, jupyter_server's default; a lab image may pin it to its own root.
+c.ContentsManager.files_handler_params = {"path": c.ServerApp.root_dir}
+
 # Uncomment to set server log level to debug level
 # c.ServerApp.log_level = "DEBUG"

@@ -2,6 +2,24 @@
 
 <!-- <START NEW CHANGELOG ENTRY> -->
 
+## [1.1.3] - 2026-11-10
+
+### Added
+
+- `voice-capture:player` drives a server-side player from one command: `play` with a path relative to the Jupyter root queues a file and starts it when nothing plays, `mode: "now"` starts it at once mixed with what plays, `pause`, `resume`, `stop`, `clear` and `status` control and report it, and a path outside the root, a missing file or an unknown action is refused with the reason
+- The speaker path: a server thread reads `speaker.fifo` (48 kHz stereo s16le) and every open JupyterLab tab plays it through an AudioWorklet, so a program that plays to the default PulseAudio sink is heard in the browser
+- Agent skill at `.agents/skills/jupyterlab-voice-capture-extension`, installed by `pip` to `share/jupyter/agents/skills/`
+- Palette entry **Stop All Audio** in category **Voice Capture** runs the player with `{"action": "stop"}`
+
+### Changed
+
+- The player replaces `voice-capture:play-file` and `voice-capture:stop-playback`
+- The README documents the speaker chain, the player and the two commands
+
+### Fixed
+
+- `voice-capture:enable` rejects after the 10 s connect bound when the microphone permission prompt stays unanswered, so the commands relay is not blocked by a pending request
+
 ## [1.0.18] - 2026-10-31
 
 ### Changed

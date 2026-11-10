@@ -5,16 +5,24 @@ import {
 
 import { ICommandPalette } from '@jupyterlab/apputils';
 
+import { URLExt } from '@jupyterlab/coreutils';
+
+import { ServerConnection } from '@jupyterlab/services';
+
 import { ISettingRegistry } from '@jupyterlab/settingregistry';
 
 import { IStatusBar } from '@jupyterlab/statusbar';
 
-import { VoiceCapture } from './voice-capture';
+import { CONNECT_TIMEOUT_MS, VoiceCapture } from './voice-capture';
 
 import { VoiceStatus } from './status';
 
 const PLUGIN_ID = '@stellarshenson/jupyterlab-voice-capture-extension:plugin';
 const TOGGLE_COMMAND = 'voice-capture:toggle';
+const PLAYER_COMMAND = 'voice-capture:player';
+const ENABLE_COMMAND = 'voice-capture:enable';
+const DISABLE_COMMAND = 'voice-capture:disable';
+const NO_ARGS = { args: { type: 'object', properties: {} } };
 
 /**
  * Initialization data for the @stellarshenson/jupyterlab-voice-capture-extension extension.
@@ -35,7 +43,80 @@ const plugin: JupyterFrontEndPlugin<void> = {
       'JupyterLab extension @stellarshenson/jupyterlab-voice-capture-extension is activated!'
     );
 
+    // Playback is always on: this tab plays the container's default PulseAudio sink.
+    const speaker = import('./speaker').then(async ({ Speaker }) => {
+      const started = new Speaker(app.serviceManager.serverSettings);
+      await started.start();
+      return started;
+    });
+    speaker.catch(reason => {
+      console.error(
+        'Failed to start jupyterlab_voice_capture_extension speaker playback.',
+        reason
+      );
+    });
+
+    // The palette runs this command with {action: 'stop'}; the relay reads the label
+    // with no args, so the label must not require args either.
+    const playerLabel = (args?: { action?: string }): string =>
+      args && args.action === 'stop' ? 'Stop All Audio' : 'Audio Player';
+
+    app.commands.addCommand(PLAYER_COMMAND, {
+      label: playerLabel,
+      // eslint-disable-next-line jupyter/no-untranslated-string -- no translator, as for TOGGLE_COMMAND
+      caption: 'Play, pause, resume, stop, clear or report audio files',
+      describedBy: {
+        args: {
+          type: 'object',
+          properties: {
+            action: {
+              type: 'string',
+              enum: ['play', 'pause', 'resume', 'stop', 'clear', 'status'],
+              description: 'Player action'
+            },
+            mode: {
+              type: 'string',
+              enum: ['queue', 'now'],
+              description:
+                'For play: append to the queue (default) or start at once, mixed'
+            },
+            path: {
+              type: 'string',
+              description:
+                'For play: audio file (mp3 or wav), relative to the Jupyter root'
+            }
+          },
+          required: ['action']
+        }
+      },
+      execute: async args => {
+        const settings = app.serviceManager.serverSettings;
+        const response = await ServerConnection.makeRequest(
+          URLExt.join(
+            settings.baseUrl,
+            'jupyterlab-voice-capture-extension',
+            'player'
+          ),
+          { method: 'POST', body: JSON.stringify(args) },
+          settings
+        );
+        const state = await response.json();
+        if (!response.ok) {
+          throw new Error(
+            state.message ||
+              `voice-capture:player failed: HTTP ${response.status}`
+          );
+        }
+        return state;
+      }
+    });
+
     const model = new VoiceCapture(app.serviceManager.serverSettings);
+    // The relay runs a command in one tab only, while each tab owns its own capture.
+    const disableChannel = new BroadcastChannel(
+      'jupyterlab-voice-capture-extension:disable'
+    );
+    disableChannel.onmessage = () => model.disable();
 
     app.commands.addCommand(TOGGLE_COMMAND, {
       label: 'Toggle Voice Capture',
@@ -43,8 +124,62 @@ const plugin: JupyterFrontEndPlugin<void> = {
       execute: () => model.toggle()
     });
 
+    // For agents (jupyterlab-commands execute); not in the palette, which has the toggle.
+    app.commands.addCommand(ENABLE_COMMAND, {
+      // eslint-disable-next-line jupyter/no-untranslated-string -- no translator, as for TOGGLE_COMMAND
+      label: 'Enable Voice Capture',
+      describedBy: NO_ARGS,
+      // Settles when the state leaves connecting: the model's connect deadline bounds the wait.
+      // An open permission prompt changes no state and would hold the relay, which runs one
+      // command at a time, so the first change must also come within that deadline.
+      execute: async () => {
+        void model.enable();
+        if (model.state === 'connecting') {
+          await new Promise<void>((resolve, reject) => {
+            const prompt = window.setTimeout(() => {
+              model.stateChanged.disconnect(settled);
+              reject(
+                new Error(
+                  'Answer the microphone permission prompt in the JupyterLab tab, then run voice-capture:enable again.'
+                )
+              );
+            }, CONNECT_TIMEOUT_MS);
+            const settled = (): void => {
+              window.clearTimeout(prompt);
+              if (model.state !== 'connecting') {
+                model.stateChanged.disconnect(settled);
+                resolve();
+              }
+            };
+            model.stateChanged.connect(settled);
+          });
+        }
+        if (model.state !== 'streaming') {
+          throw new Error(
+            model.message || 'Voice capture was turned off before it connected.'
+          );
+        }
+      }
+    });
+
+    app.commands.addCommand(DISABLE_COMMAND, {
+      // eslint-disable-next-line jupyter/no-untranslated-string -- no translator, as for TOGGLE_COMMAND
+      label: 'Disable Voice Capture',
+      describedBy: NO_ARGS,
+      execute: () => {
+        disableChannel.postMessage(null);
+        model.disable();
+      }
+    });
+
     if (palette) {
       palette.addItem({ command: TOGGLE_COMMAND, category: 'Voice Capture' });
+      palette.addItem({
+        command: PLAYER_COMMAND,
+        args: { action: 'stop' },
+        // eslint-disable-next-line jupyter/no-untranslated-string -- no translator, as for TOGGLE_COMMAND
+        category: 'Voice Capture'
+      });
     }
 
     if (statusBar) {

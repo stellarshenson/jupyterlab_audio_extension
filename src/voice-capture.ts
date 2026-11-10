@@ -16,11 +16,11 @@ import { WORKLET_PROCESSOR_NAME, workletModuleUrl } from './worklet';
  */
 export type VoiceCaptureState = 'idle' | 'connecting' | 'streaming' | 'error';
 
-const BASE_BACKOFF_MS = 500;
-const MAX_BACKOFF_MS = 10000;
+export const BASE_BACKOFF_MS = 500;
+export const MAX_BACKOFF_MS = 10000;
 // How long the websocket may stay unconnected before the control shows Error. Retries
 // continue in the background, so it still recovers to Connected if the bridge comes up.
-const CONNECT_TIMEOUT_MS = 10000;
+export const CONNECT_TIMEOUT_MS = 10000;
 // Close code the server sends when a newer tab takes over (SUPERSEDED_CLOSE_CODE in
 // routes.py). This tab stops capture instead of reconnecting and taking the stream back.
 const SUPERSEDED_CLOSE_CODE = 4001;
