@@ -591,12 +591,14 @@ Status bar controls that act on the player: play, pause and stop
 
 - log: 2026-11-10T22:26:49Z @kj category created
 
-- [x] `ACC-CTRL-66-CONTROLS` **Playback controls in the status bar** - HIGH; the status bar shows a play control and a pause control beside the microphone toggle
-  - evidence: jest player-status spec: the status bar item holds exactly two control buttons, one play/stop and one pause; Galata: the playback item renders beside the microphone toggle, 18 passed
+- [x] `ACC-CTRL-66-CONTROLS` **Playback controls in the status bar** - HIGH; the status bar shows one pill holding the microphone toggle, a play/stop control and a pause control, separated by hairline dividers
+  - evidence: jest: one pill root holds mic, divider, play/stop, divider, pause with three icons; Galata: the pill class is present, two dividers, all three segments inside the pill box
   - test: open the lab, assert both controls sit in the status bar next to the capture toggle
   - test-tags: UNIT, FUNCTIONAL
   - log: 2026-11-10T22:26:49Z @kj added
   - log: 2026-11-10T23:54:35Z @kj closed: verified in v1.1.3+controls
+  - log: 2026-11-11T12:35:34Z @kj amended text "the status bar shows a play control and a pause control beside the microphone toggle" -> "the status bar shows one pill holding the microphone toggle, a play/stop control and a pause control, separated by hairline dividers"
+  - log: 2026-11-11T13:08:07Z @kj edited evidence "jest player-status spec: the status bar item holds exactly two control buttons, one play/stop and one pause; Galata: the playback item renders beside the microphone toggle, 18 passed" -> "jest: one pill root holds mic, divider, play/stop, divider, pause with three icons; Galata: the pill class is present, two dividers, all three segments inside the pill box"
 - [x] `ACC-CTRL-67-STOP-FACE` **Play reads as stop while playing** - HIGH; while a file plays the play control shows stop, and when nothing plays it shows play
   - evidence: jest: playing shows the stop face and idle shows play; Galata: the idle face is play
   - test: play a file, assert the control shows stop; stop it, assert play
@@ -610,15 +612,35 @@ Status bar controls that act on the player: play, pause and stop
   - log: 2026-11-10T22:26:49Z @kj added
   - log: 2026-11-10T23:54:35Z @kj edited test-tags "UNIT, E2E" -> "UNIT"
   - log: 2026-11-10T23:54:35Z @kj closed: verified in v1.1.3+controls
-- [x] `ACC-CTRL-69-GREYED` **Controls disabled when idle** - HIGH; when the player plays nothing both controls are disabled and drawn grey as the disabled microphone toggle is
-  - evidence: jest: both controls disabled when idle; Galata: the disabled colour equals the idle microphone grey, 18 passed
+- [x] `ACC-CTRL-69-GREYED` **Controls disabled when idle** - HIGH; when the player plays nothing both player controls are disabled and drawn in the same grey as the disabled microphone segment
+  - evidence: jest: both player controls disabled when idle; Galata: the idle mic colour equals the disabled pause colour
   - test: with nothing playing, assert both controls are disabled and carry the grey style of the disabled capture toggle
   - test-tags: UNIT, E2E
   - log: 2026-11-10T22:26:49Z @kj added
   - log: 2026-11-10T23:54:35Z @kj closed: verified in v1.1.3+controls
+  - log: 2026-11-11T12:35:34Z @kj amended text "when the player plays nothing both controls are disabled and drawn grey as the disabled microphone toggle is" -> "when the player plays nothing both player controls are disabled and drawn in the same grey as the disabled microphone segment"
+  - log: 2026-11-11T13:08:07Z @kj edited evidence "jest: both controls disabled when idle; Galata: the disabled colour equals the idle microphone grey, 18 passed" -> "jest: both player controls disabled when idle; Galata: the idle mic colour equals the disabled pause colour"
 - [x] `ACC-CTRL-72-BLINK` **Play icon blinks when the sink is not functional** - HIGH; when the player status reports the sink not functional, the play icon blinks in the error colour and the tooltip carries the reason
   - evidence: jest and Galata: jp-mod-error, vc-blink animation and var(--jp-warn-color1) on the play control with the reason in the tooltip
   - test: jest: return sink not ok from the status poll, assert the play control carries the blinking error class and the tooltip carries the reason; Galata: a lab without the voiceout sink shows the blinking play icon
   - test-tags: UNIT, FUNCTIONAL
   - log: 2026-11-10T22:43:25Z @kj added
   - log: 2026-11-10T23:54:36Z @kj closed: verified in v1.1.3+controls
+- [x] `ACC-CTRL-73-BLINK-END` **The error blink ends after 30 seconds** - HIGH; when the sink stays broken the play control blinks for 30 seconds and then stops blinking and reads as disabled, with the reason still in the tooltip
+  - evidence: jest fake timers: blink present, gone after 30 s with both controls disabled and the reason kept, recovery ends the episode and a new break blinks again; Galata: the blink class is present on load
+  - test: jest with fake timers: return sink not ok, assert the blinking class, advance 30 s, assert it is gone and the control disabled; Galata: the blink is present on load
+  - test-tags: UNIT, FUNCTIONAL
+  - log: 2026-11-11T12:28:19Z @kj added
+  - log: 2026-11-11T13:08:07Z @kj closed: verified in the pill build
+- [x] `ACC-CTRL-74-FLAT` **Enabled state lights the glyphs only** - MEDIUM; the playback pill paints no background tint for hover, active or pressed; an enabled control is shown by its glyph colour alone
+  - evidence: jest: no inline style and no background class in any state; Galata: computed background of the pill and all three segments equal, unchanged after hover
+  - test: jest: no tinted background class on any control in any state; Galata: computed background-color of the pill controls equals the pill background
+  - test-tags: UNIT, FUNCTIONAL
+  - log: 2026-11-11T12:33:21Z @kj added
+  - log: 2026-11-11T13:08:07Z @kj closed: verified in the pill build
+- [x] `ACC-CTRL-75-MIC-COLOR` **The microphone segment shares the control colours** - MEDIUM; the microphone segment inside the pill uses the same enabled colour as play, stop and pause, and the same disabled colour as they do when disabled
+  - evidence: jest: the mic and pause share the control class and the root state classes; Galata: computed idle mic equals the disabled pause colour and the streaming mic equals the enabled pause colour
+  - test: jest: the microphone control and the pause control carry the same computed class/colour in the enabled state and in the disabled state; Galata: computed colour of the mic equals that of an enabled control
+  - test-tags: UNIT, FUNCTIONAL
+  - log: 2026-11-11T12:33:21Z @kj added
+  - log: 2026-11-11T13:08:07Z @kj closed: verified in the pill build

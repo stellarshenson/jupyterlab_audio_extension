@@ -12,9 +12,6 @@ jest.mock('../speaker', () => ({
   }
 }));
 jest.mock('../status', () => ({}));
-jest.mock('../player-status', () => ({
-  PlayerStatus: class {}
-}));
 
 /** jsdom has no BroadcastChannel: records every channel the plugin opens. */
 class FakeBroadcastChannel {

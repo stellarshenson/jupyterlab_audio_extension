@@ -92,7 +92,7 @@ async function openLab(
 
 async function animation(page: Page): Promise<string> {
   return page
-    .locator(`${STATUS} ${ICON}`)
+    .locator(`${STATUS} [data-vc-control="mic"] ${ICON}`)
     .evaluate(el => getComputedStyle(el).animationName);
 }
 
@@ -210,7 +210,7 @@ test.describe('voice capture', () => {
     expect((await record(page)).gum).toBe(0);
     expect(reader.last().bytes).toBe(0);
 
-    await status.click();
+    await status.locator('[data-vc-control="mic"]').click();
     await expect.poll(async () => (await record(page)).gum).toBe(1);
   });
 
@@ -220,7 +220,7 @@ test.describe('voice capture', () => {
   }) => {
     await openLab(page, `${baseURL}/lab`);
     const status = page.locator(STATUS);
-    await status.click();
+    await status.locator('[data-vc-control="mic"]').click();
     await expect(status).toHaveAttribute('data-vc-state', 'streaming', {
       timeout: 15000
     });
@@ -248,13 +248,13 @@ test.describe('voice capture', () => {
   }) => {
     await openLab(page, `${baseURL}/lab`);
     const status = page.locator(STATUS);
-    await status.click();
+    await status.locator('[data-vc-control="mic"]').click();
     await expect(status).toHaveAttribute('data-vc-state', 'streaming', {
       timeout: 15000
     });
     await reader.waitForBytes(BYTES_PER_SECOND / 2);
 
-    await status.click();
+    await status.locator('[data-vc-control="mic"]').click();
     await expect(status).toHaveAttribute('data-vc-state', 'idle');
     await expect(status).toHaveAttribute(
       'title',
@@ -319,7 +319,7 @@ test.describe('voice capture', () => {
   }) => {
     await openLab(page, `${baseURL}/lab`, { denyMic: true });
     const status = page.locator(STATUS);
-    await status.click();
+    await status.locator('[data-vc-control="mic"]').click();
     await expect(status).toHaveAttribute('data-vc-state', 'error');
     await expect(status).toHaveAttribute(
       'title',
@@ -327,7 +327,7 @@ test.describe('voice capture', () => {
     );
     expect(await animation(page)).toBe('vc-blink');
 
-    await status.click();
+    await status.locator('[data-vc-control="mic"]').click();
     await expect(status).toHaveAttribute('data-vc-state', 'idle');
     await expect(status).toHaveAttribute(
       'title',
@@ -343,7 +343,7 @@ test.describe('voice capture', () => {
   }) => {
     await openLab(page, `${baseURL}/lab`);
     const status = page.locator(STATUS);
-    await status.click();
+    await status.locator('[data-vc-control="mic"]').click();
     await expect(status).toHaveAttribute('data-vc-state', 'streaming', {
       timeout: 15000
     });
@@ -366,7 +366,7 @@ test.describe('voice capture', () => {
     const tab = await page.context().newPage();
     await openLab(tab, `${baseURL}/lab`);
     const status = tab.locator(STATUS);
-    await status.click();
+    await status.locator('[data-vc-control="mic"]').click();
     await expect(status).toHaveAttribute('data-vc-state', 'streaming', {
       timeout: 15000
     });
@@ -382,7 +382,7 @@ test.describe('voice capture', () => {
   }) => {
     await openLab(page, `${baseURL}/lab`);
     const first = page.locator(STATUS);
-    await first.click();
+    await first.locator('[data-vc-control="mic"]').click();
     await expect(first).toHaveAttribute('data-vc-state', 'streaming', {
       timeout: 15000
     });
@@ -390,7 +390,7 @@ test.describe('voice capture', () => {
     const tab = await page.context().newPage();
     await openLab(tab, `${baseURL}/lab`);
     const second = tab.locator(STATUS);
-    await second.click();
+    await second.locator('[data-vc-control="mic"]').click();
     await expect(second).toHaveAttribute('data-vc-state', 'streaming', {
       timeout: 15000
     });
@@ -425,7 +425,7 @@ test.describe('voice capture', () => {
 
     const idle = await window();
     const status = page.locator(STATUS);
-    await status.click();
+    await status.locator('[data-vc-control="mic"]').click();
     await expect(status).toHaveAttribute('data-vc-state', 'streaming', {
       timeout: 15000
     });
@@ -655,7 +655,7 @@ test.describe('speaker', () => {
     await waitForPlaying(tab);
 
     const status = tab.locator(STATUS);
-    await status.click();
+    await status.locator('[data-vc-control="mic"]').click();
     await expect(status).toHaveAttribute('data-vc-state', 'streaming', {
       timeout: 15000
     });
@@ -815,33 +815,76 @@ test.describe('player', () => {
     });
   });
 
-  test('ACC-CTRL-66/69: the playback controls sit beside the microphone toggle and are disabled while the player is idle', async ({
+  test('ACC-CTRL-66/69/74/75: one pill holds the microphone and both controls, flat and disabled while the player is idle', async ({
     page,
     baseURL
   }) => {
     await openLab(page, `${baseURL}/lab`);
-    const mic = page.locator(STATUS);
-    const playback = page.locator('.jp-VoiceCapture-playback');
-    await expect(playback).toBeVisible();
-    await expect(playback).toHaveAttribute('data-vc-player', 'idle');
+    const pill = page.locator(STATUS);
+    await expect(pill).toHaveClass(/jp-VoiceCapture-pill/);
+    await expect(page.locator('.jp-VoiceCapture-playback')).toHaveCount(0);
+    await expect(pill).toHaveAttribute('data-vc-player', 'idle');
 
-    // Same status-bar row, the playback item to the right of the microphone toggle.
-    const micBox = (await mic.boundingBox())!;
-    const playbackBox = (await playback.boundingBox())!;
-    expect(playbackBox.x).toBeGreaterThan(micBox.x);
-    expect(playbackBox.y).toBeLessThan(micBox.y + micBox.height);
-    expect(playbackBox.y + playbackBox.height).toBeGreaterThan(micBox.y);
+    const mic = pill.locator('[data-vc-control="mic"]');
+    const play = pill.locator('[data-vc-control="play"]');
+    const pause = pill.locator('[data-vc-control="pause"]');
+    await expect(mic).toBeVisible();
+    await expect(play).toBeVisible();
+    await expect(pause).toBeVisible();
+    await expect(pill.locator('.jp-VoiceCapture-divider')).toHaveCount(2);
 
-    const play = playback.locator('[data-vc-control="play"]');
-    const pause = playback.locator('[data-vc-control="pause"]');
+    // The three segments sit inside the one pill, in a single row.
+    const pillBox = (await pill.boundingBox())!;
+    for (const control of [mic, play, pause]) {
+      const box = (await control.boundingBox())!;
+      expect(box.x).toBeGreaterThanOrEqual(pillBox.x);
+      expect(box.x + box.width).toBeLessThanOrEqual(
+        pillBox.x + pillBox.width + 0.5
+      );
+      expect(box.y).toBeGreaterThanOrEqual(pillBox.y);
+      expect(box.y + box.height).toBeLessThanOrEqual(
+        pillBox.y + pillBox.height + 0.5
+      );
+    }
+
     await expect(play).toBeDisabled();
     await expect(pause).toBeDisabled();
     await expect(play).toHaveAttribute('data-vc-face', 'play');
 
-    // The disabled pause control carries the idle microphone toggle's colour; the play
-    // control carries the sink error colour in a lab without the voiceout sink (ACC-CTRL-72).
-    const grey = await mic.evaluate(el => getComputedStyle(el).color);
-    expect(await pause.evaluate(el => getComputedStyle(el).color)).toBe(grey);
+    // Flat: every segment paints the pill's own background, hover included (ACC-CTRL-74).
+    const background = await pill.evaluate(
+      el => getComputedStyle(el).backgroundColor
+    );
+    for (const control of [mic, play, pause]) {
+      expect(
+        await control.evaluate(el => getComputedStyle(el).backgroundColor)
+      ).toBe(background);
+    }
+    await mic.hover();
+    expect(await mic.evaluate(el => getComputedStyle(el).backgroundColor)).toBe(
+      background
+    );
+
+    // ACC-CTRL-75: the microphone uses the controls' disabled and enabled colours.
+    const colours = await pill.evaluate(el => {
+      const mic = el.querySelector('[data-vc-control="mic"]') as HTMLElement;
+      const pause = el.querySelector(
+        '[data-vc-control="pause"]'
+      ) as HTMLButtonElement;
+      const disabled = getComputedStyle(pause).color;
+      const wasDisabled = pause.disabled;
+      pause.disabled = false;
+      const enabled = getComputedStyle(pause).color;
+      pause.disabled = wasDisabled;
+
+      const idle = getComputedStyle(mic).color;
+      el.classList.add('jp-mod-streaming');
+      const streaming = getComputedStyle(mic).color;
+      el.classList.remove('jp-mod-streaming');
+      return { disabled, enabled, idle, streaming };
+    });
+    expect(colours.idle).toBe(colours.disabled);
+    expect(colours.streaming).toBe(colours.enabled);
   });
 
   test('ACC-PLAYER-71/72: a missing speaker FIFO blinks the play control with the reason in its tooltip', async ({
@@ -849,10 +892,10 @@ test.describe('player', () => {
     baseURL
   }) => {
     await openLab(page, `${baseURL}/lab`);
-    const play = page.locator(
-      '.jp-VoiceCapture-playback [data-vc-control="play"]'
-    );
+    const pill = page.locator(STATUS);
+    const play = pill.locator('[data-vc-control="play"]');
     await expect(play).toHaveClass(/jp-mod-error/);
+    await expect(play).toHaveClass(/jp-mod-blink/);
     await expect(play).toHaveAttribute('data-vc-face', 'play');
     await expect(play).toBeDisabled();
     await expect(play).toHaveAttribute(
@@ -874,6 +917,9 @@ test.describe('player', () => {
       return colour;
     });
     expect(await play.evaluate(el => getComputedStyle(el).color)).toBe(warn);
+    expect(await pill.evaluate(el => getComputedStyle(el).borderTopColor)).toBe(
+      warn
+    );
   });
 });
 
@@ -913,7 +959,7 @@ test.describe('real chain', () => {
   }) => {
     const tab = await openSpeakerTab(page.context(), `${baseURL}/lab`);
     const status = tab.locator(STATUS);
-    await status.click(); // the one click: starts capture and lets the speaker play
+    await status.locator('[data-vc-control="mic"]').click(); // the one click: starts capture and lets the speaker play
     await expect(status).toHaveAttribute('data-vc-state', 'streaming', {
       timeout: 15000
     });

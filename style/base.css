@@ -4,13 +4,30 @@
     https://jupyterlab.readthedocs.io/en/stable/developer/css.html
 */
 
-.jp-VoiceCapture-status {
+/* One status-bar pill: microphone, play/stop and pause between hairline dividers. */
+.jp-VoiceCapture-status.jp-VoiceCapture-pill {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 0 6px;
-  cursor: pointer;
+  gap: 0;
+  box-sizing: border-box;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--jp-border-color2);
+  border-radius: 7px;
+  background: none;
+  cursor: default;
   color: var(--jp-ui-font-color2);
+}
+
+/* A broken sink keeps the amber border for the whole episode. */
+.jp-VoiceCapture-status.jp-mod-sink-error {
+  border-color: var(--jp-warn-color1);
+}
+
+.jp-VoiceCapture-divider {
+  width: 1px;
+  height: 12px;
+  background: var(--jp-border-color2);
 }
 
 .jp-VoiceCapture-icon {
@@ -23,62 +40,79 @@
   height: 16px;
 }
 
-/* The playback root is a container, not a click target; its two buttons are. */
-.jp-VoiceCapture-playback {
-  cursor: default;
-}
-
 .jp-VoiceCapture-control {
   display: flex;
   align-items: center;
-  padding: 4px;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 24px;
+  height: 100%;
+  padding: 0;
   border: none;
+  border-radius: 0;
   background: none;
   color: var(--jp-ui-font-color1);
   cursor: pointer;
 }
 
-/* Disabled controls carry the idle microphone toggle's grey. */
+/* The idle microphone uses the disabled control grey (ACC-CTRL-75). */
+.jp-VoiceCapture-mic {
+  color: var(--jp-ui-font-color2);
+}
+
+/* Flat: an enabled control is its glyph colour alone (ACC-CTRL-74). */
+.jp-VoiceCapture-control:hover,
+.jp-VoiceCapture-control:active {
+  background: none;
+}
+
 .jp-VoiceCapture-control:disabled {
   color: var(--jp-ui-font-color2);
   cursor: default;
 }
 
-/* A non-functional sink colours the play control as the microphone error does, disabled or not. */
-.jp-VoiceCapture-control.jp-mod-error,
-.jp-VoiceCapture-control.jp-mod-error:disabled {
+/* The broken-sink episode: the play glyph blinks in the error colour for 30 s. */
+.jp-VoiceCapture-control.jp-mod-error.jp-mod-blink,
+.jp-VoiceCapture-control.jp-mod-error.jp-mod-blink:disabled {
   color: var(--jp-warn-color1);
 }
 
-.jp-VoiceCapture-control.jp-mod-error .jp-VoiceCapture-icon {
+.jp-VoiceCapture-control.jp-mod-blink .jp-VoiceCapture-icon {
   animation: vc-blink 1s steps(1, end) infinite;
 }
 
 /*
-  State colours apply to the whole control; animations are scoped to the icon only.
-  disconnected: neutral | connecting: blue fade | connected: green glow pulse | error: orange blink
+  The microphone segment shares the control palette (ACC-CTRL-75); its animations are
+  scoped to its own icon.
+  connecting: blue fade | streaming: enabled colour with a glow pulse | error: orange blink
 */
-.jp-VoiceCapture-status.jp-mod-connecting {
+.jp-VoiceCapture-status.jp-mod-connecting .jp-VoiceCapture-mic {
   color: var(--jp-brand-color1);
 }
 
-.jp-VoiceCapture-status.jp-mod-streaming {
-  color: var(--jp-success-color1);
+.jp-VoiceCapture-status.jp-mod-streaming .jp-VoiceCapture-mic {
+  color: var(--jp-ui-font-color1);
 }
 
-.jp-VoiceCapture-status.jp-mod-error {
+.jp-VoiceCapture-status.jp-mod-error .jp-VoiceCapture-mic {
   color: var(--jp-warn-color1);
 }
 
-.jp-VoiceCapture-status.jp-mod-connecting .jp-VoiceCapture-icon {
+.jp-VoiceCapture-status.jp-mod-connecting
+  .jp-VoiceCapture-mic
+  .jp-VoiceCapture-icon {
   animation: vc-fade 1.2s ease-in-out infinite;
 }
 
-.jp-VoiceCapture-status.jp-mod-streaming .jp-VoiceCapture-icon {
+.jp-VoiceCapture-status.jp-mod-streaming
+  .jp-VoiceCapture-mic
+  .jp-VoiceCapture-icon {
   animation: vc-pulse 2.4s ease-in-out infinite;
 }
 
-.jp-VoiceCapture-status.jp-mod-error .jp-VoiceCapture-icon {
+.jp-VoiceCapture-status.jp-mod-error
+  .jp-VoiceCapture-mic
+  .jp-VoiceCapture-icon {
   animation: vc-blink 1s steps(1, end) infinite;
 }
 

@@ -19,8 +19,6 @@ import { CONNECT_TIMEOUT_MS, VoiceCapture } from './voice-capture';
 // eslint-disable-next-line jupyter/prefer-lazy-imports -- activate() registers the status item at once
 import { VoiceStatus } from './status';
 
-import { PlayerStatus } from './player-status';
-
 const PLUGIN_ID = '@stellarshenson/jupyterlab-voice-capture-extension:plugin';
 const TOGGLE_COMMAND = 'voice-capture:toggle';
 const PLAYER_COMMAND = 'voice-capture:player';
@@ -193,17 +191,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
       statusBar.registerStatusItem(
         'jupyterlab_voice_capture_extension:status',
         {
-          item: new VoiceStatus(model),
+          item: new VoiceStatus(model, app.serviceManager.serverSettings),
           align: 'left',
           rank: 100
-        }
-      );
-      statusBar.registerStatusItem(
-        'jupyterlab_voice_capture_extension:player',
-        {
-          item: new PlayerStatus(app.serviceManager.serverSettings),
-          align: 'left',
-          rank: 101
         }
       );
     }

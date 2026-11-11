@@ -2,6 +2,17 @@
 
 <!-- <START NEW CHANGELOG ENTRY> -->
 
+## [1.1.5] - 2026-11-11
+
+### Added
+
+- The microphone, the play/stop control and the pause control share one status bar pill with 7 px corners and hairline dividers between the segments
+- The sink error blink ends after 30 seconds: the play control stops blinking and reads disabled, with the reason left in its tooltip; a healthy status ends the episode, so a later break blinks again
+
+### Changed
+
+- No background tint in any state: an enabled control is shown by its glyph colour alone, and the microphone lights in the same colour as the player controls
+
 ## [1.1.4] - 2026-11-11
 
 ### Added

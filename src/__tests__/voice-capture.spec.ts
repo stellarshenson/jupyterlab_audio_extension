@@ -16,9 +16,6 @@ jest.mock('../status', () => ({
     constructor(readonly model: VoiceCapture) {}
   }
 }));
-jest.mock('../player-status', () => ({
-  PlayerStatus: class {}
-}));
 
 /**
  * Browser-side lifecycle tests. The Web Audio + WebSocket APIs are not implemented by
