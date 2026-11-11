@@ -91,6 +91,11 @@ function controls(widget: VoiceStatus): IControls {
   };
 }
 
+/** The sink warning dot inside the play control. */
+function dot(play: HTMLButtonElement): HTMLSpanElement {
+  return play.querySelector('.jp-VoiceCapture-dot') as HTMLSpanElement;
+}
+
 let request: jest.SpyInstance;
 
 beforeEach(() => {
@@ -281,29 +286,37 @@ describe('VoiceStatus player controls', () => {
     expect(play.disabled).toBe(true);
     expect(pause.disabled).toBe(true);
     expect(play.dataset.vcFace).toBe('play');
-    expect(play.classList.contains('jp-mod-error')).toBe(false);
+    expect(dot(play).hidden).toBe(true);
 
     widget.dispose();
   });
 
-  it('ACC-CTRL-72: a broken sink marks the play control with the error class and the reason in its tooltip', async () => {
+  it('ACC-CTRL-72/77: a broken sink blinks an amber dot and a plain tooltip', async () => {
     request.mockImplementation(async () =>
       response({ ...IDLE, sink: SINK_BROKEN })
     );
     const widget = create().widget;
     await settle();
     const { root, play, pause } = controls(widget);
+    const warning = dot(play);
 
-    expect(play.classList.contains('jp-mod-error')).toBe(true);
-    expect(play.classList.contains('jp-mod-blink')).toBe(true);
-    expect(play.title).toBe(`Play - ${SINK_BROKEN.reason}`);
-    expect(play.getAttribute('aria-label')).toBe(
-      `Play - ${SINK_BROKEN.reason}`
-    );
+    expect(warning).not.toBeNull();
+    expect(warning.getAttribute('aria-hidden')).toBe('true');
+    expect(warning.hidden).toBe(false);
+    expect(warning.classList.contains('jp-mod-blink')).toBe(true);
+    expect(play.classList.contains('jp-mod-error')).toBe(false);
     expect(pause.classList.contains('jp-mod-error')).toBe(false);
+    expect(root.classList.contains('jp-mod-sink-error')).toBe(false);
+    expect(pause.classList.contains('jp-mod-blink')).toBe(false);
+    expect(play.title).toBe('Play - Audio output is unavailable');
+    expect(play.getAttribute('aria-label')).toBe(
+      'Play - Audio output is unavailable'
+    );
+    expect(play.title).not.toMatch(
+      /fifo|\/|start -d|jupyterlab_voice_capture/i
+    );
     expect(play.dataset.vcFace).toBe('play');
     expect(root.dataset.vcPlayer).toBe('idle');
-    expect(root.classList.contains('jp-mod-sink-error')).toBe(true);
 
     widget.dispose();
   });
@@ -318,7 +331,8 @@ describe('VoiceStatus player controls', () => {
     expect(play.dataset.vcFace).toBe('stop');
     expect(play.disabled).toBe(false);
     expect(pause.disabled).toBe(false);
-    expect(play.title).toBe(`Stop - ${SINK_BROKEN.reason}`);
+    expect(play.title).toBe('Stop - Audio output is unavailable');
+    expect(dot(play).hidden).toBe(false);
     playing.dispose();
 
     request.mockImplementation(async () =>
@@ -330,23 +344,24 @@ describe('VoiceStatus player controls', () => {
     expect(play.dataset.vcFace).toBe('play');
     expect(play.disabled).toBe(false);
     expect(pause.disabled).toBe(true);
-    expect(play.title).toBe(`Resume - ${SINK_BROKEN.reason}`);
+    expect(play.title).toBe('Resume - Audio output is unavailable');
     paused.dispose();
   });
 
-  it('ACC-CTRL-72: the error class and the reason clear when the sink recovers', async () => {
+  it('ACC-CTRL-72: the dot and the plain tooltip clear when the sink recovers', async () => {
     request.mockImplementation(async () =>
       response({ ...PLAYING, sink: SINK_BROKEN })
     );
     const widget = create().widget;
     await settle();
     const { play } = controls(widget);
-    expect(play.classList.contains('jp-mod-error')).toBe(true);
+    expect(dot(play).hidden).toBe(false);
 
     request.mockImplementation(async () => response(IDLE));
     play.click(); // stop
     await settle();
-    expect(play.classList.contains('jp-mod-error')).toBe(false);
+    expect(dot(play).hidden).toBe(true);
+    expect(dot(play).classList.contains('jp-mod-blink')).toBe(false);
     expect(play.title).toBe('Play');
 
     widget.dispose();
@@ -354,7 +369,7 @@ describe('VoiceStatus player controls', () => {
 });
 
 describe('VoiceStatus blink limit', () => {
-  it('ACC-CTRL-73: the blink runs 30 s, then reads disabled, and a later break blinks again', async () => {
+  it('ACC-CTRL-73: the dot blinks 30 s, disappears, and a later break blinks again', async () => {
     jest.useFakeTimers();
     let state: object = { ...PLAYING, sink: SINK_BROKEN };
     request.mockImplementation(async () => response(state));
@@ -362,27 +377,37 @@ describe('VoiceStatus blink limit', () => {
     const widget = create().widget;
     await jest.advanceTimersByTimeAsync(0);
     const { play, pause } = controls(widget);
-    expect(play.classList.contains('jp-mod-error')).toBe(true);
-    expect(play.classList.contains('jp-mod-blink')).toBe(true);
+    const warning = dot(play);
+    expect(warning.hidden).toBe(false);
+    expect(warning.classList.contains('jp-mod-blink')).toBe(true);
     expect(play.disabled).toBe(false);
     expect(pause.disabled).toBe(false);
 
-    await jest.advanceTimersByTimeAsync(30000);
-    expect(play.classList.contains('jp-mod-blink')).toBe(false);
+    await jest.advanceTimersByTimeAsync(29999);
+    expect(warning.hidden).toBe(false);
+    expect(warning.classList.contains('jp-mod-blink')).toBe(true);
+    expect(play.disabled).toBe(false);
+    expect(pause.disabled).toBe(false);
+
+    await jest.advanceTimersByTimeAsync(1);
+    expect(warning.hidden).toBe(true);
+    expect(warning.classList.contains('jp-mod-blink')).toBe(false);
     expect(play.disabled).toBe(true);
     expect(pause.disabled).toBe(true);
-    expect(play.title).toBe(`Stop - ${SINK_BROKEN.reason}`);
+    expect(play.title).toBe('Stop - Audio output is unavailable');
 
     // A healthy status ends the episode.
     state = { ...PLAYING };
     await jest.advanceTimersByTimeAsync(2000);
-    expect(play.classList.contains('jp-mod-error')).toBe(false);
+    expect(warning.hidden).toBe(true);
     expect(play.disabled).toBe(false);
+    expect(play.title).toBe('Stop');
 
     // A break after the recovery starts a new blink.
     state = { ...PLAYING, sink: SINK_BROKEN };
     await jest.advanceTimersByTimeAsync(2000);
-    expect(play.classList.contains('jp-mod-blink')).toBe(true);
+    expect(warning.hidden).toBe(false);
+    expect(warning.classList.contains('jp-mod-blink')).toBe(true);
     expect(play.disabled).toBe(false);
 
     widget.dispose();

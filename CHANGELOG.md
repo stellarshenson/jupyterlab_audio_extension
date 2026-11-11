@@ -2,6 +2,14 @@
 
 <!-- <START NEW CHANGELOG ENTRY> -->
 
+## [1.1.6] - 2026-11-11
+
+### Changed
+
+- The broken audio sink shows as a 6 px amber dot at the top-right of the play control, blinking for 30 seconds and then disappearing with both controls disabled; the pill keeps its border and the play glyph keeps its normal colour
+- The play tooltip says `Audio output is unavailable` in plain words, with no file path, FIFO or command
+- The streaming microphone shows the enabled colour alone, with no glow or pulse animation
+
 ## [1.1.5] - 2026-11-11
 
 ### Added

@@ -19,11 +19,6 @@
   color: var(--jp-ui-font-color2);
 }
 
-/* A broken sink keeps the amber border for the whole episode. */
-.jp-VoiceCapture-status.jp-mod-sink-error {
-  border-color: var(--jp-warn-color1);
-}
-
 .jp-VoiceCapture-divider {
   width: 1px;
   height: 12px;
@@ -71,20 +66,29 @@
   cursor: default;
 }
 
-/* The broken-sink episode: the play glyph blinks in the error colour for 30 s. */
-.jp-VoiceCapture-control.jp-mod-error.jp-mod-blink,
-.jp-VoiceCapture-control.jp-mod-error.jp-mod-blink:disabled {
-  color: var(--jp-warn-color1);
+/* The sink warning: an amber dot at the play control's top-right corner (ACC-CTRL-72). */
+[data-vc-control='play'] {
+  position: relative;
 }
 
-.jp-VoiceCapture-control.jp-mod-blink .jp-VoiceCapture-icon {
+.jp-VoiceCapture-dot {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--jp-warn-color0);
+}
+
+.jp-VoiceCapture-dot.jp-mod-blink {
   animation: vc-blink 1s steps(1, end) infinite;
 }
 
 /*
   The microphone segment shares the control palette (ACC-CTRL-75); its animations are
-  scoped to its own icon.
-  connecting: blue fade | streaming: enabled colour with a glow pulse | error: orange blink
+  scoped to its own icon. connecting: blue fade | streaming: enabled colour, no animation |
+  error: orange blink
 */
 .jp-VoiceCapture-status.jp-mod-connecting .jp-VoiceCapture-mic {
   color: var(--jp-brand-color1);
@@ -104,30 +108,10 @@
   animation: vc-fade 1.2s ease-in-out infinite;
 }
 
-.jp-VoiceCapture-status.jp-mod-streaming
-  .jp-VoiceCapture-mic
-  .jp-VoiceCapture-icon {
-  animation: vc-pulse 2.4s ease-in-out infinite;
-}
-
 .jp-VoiceCapture-status.jp-mod-error
   .jp-VoiceCapture-mic
   .jp-VoiceCapture-icon {
   animation: vc-blink 1s steps(1, end) infinite;
-}
-
-/* connected: subtle green glow pulse */
-@keyframes vc-pulse {
-  0%,
-  100% {
-    opacity: 0.95;
-    filter: drop-shadow(0 0 1px var(--jp-success-color1));
-  }
-
-  50% {
-    opacity: 1;
-    filter: drop-shadow(0 0 3px var(--jp-success-color1));
-  }
 }
 
 /* error: hard on/off orange blink */

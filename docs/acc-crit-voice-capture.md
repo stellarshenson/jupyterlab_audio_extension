@@ -54,15 +54,16 @@ Browser microphone capture and the status-bar control
   - log: 2026-09-28T09:16:29Z @kj closed: verified in v1.0.11
   - log: 2026-11-06T16:30:02Z @kj coded RELEASE
 - [x] `ACC-MIC-4-STATE` **A4 visible state** - HIGH; the control shows exactly one of idle, connecting, streaming and error at all times through its icon and animation; each state looks different from the others
-  - evidence: functional A1/A2/E1: data-vc-state idle, streaming, error with animations none, vc-pulse, vc-blink; jest covers connecting
+  - evidence: functional A1/A2/E1: data-vc-state idle, streaming and error with animations none, none and vc-blink, and the streaming icon in the enabled colour with no glow; jest covers connecting
   - test-tags: UNIT, FUNCTIONAL
-  - test: drive idle, streaming and error in a browser, assert data-vc-state and the icon animation (none, vc-pulse, vc-blink); connecting in jest
+  - test: drive idle, streaming and error in a browser, assert data-vc-state and the icon animation (none, none, vc-blink); connecting in jest
   - log: 2026-09-28T08:54:26Z @kj edited importance added "HIGH"; test added "drive idle, connecting, streaming and error, assert the status item carries exactly one jp-mod-<state> class"
   - log: 2026-09-28T08:54:56Z @kj amended text "the control reflects exactly one of idle / streaming / error at all times; the streaming state is visually distinct from idle" -> "the control shows exactly one of idle (Disconnected), connecting, streaming (Connected) and error at all times; each state looks different from the others"
   - log: 2026-09-28T09:16:29Z @kj edited test "drive idle, connecting, streaming and error, assert the status item carries exactly one jp-mod-<state> class" -> "drive idle, streaming and error in a browser, assert data-vc-state and the icon animation (none, vc-pulse, vc-blink); connecting in jest"; test-tags added "UNIT, FUNCTIONAL"
   - log: 2026-09-28T09:16:29Z @kj closed: verified in v1.0.11
   - log: 2026-11-06T16:30:02Z @kj coded STATE
   - log: 2026-11-10T22:37:39Z @kj amended text "the control shows exactly one of idle (Disconnected), connecting, streaming (Connected) and error at all times; each state looks different from the others" -> "the control shows exactly one of idle, connecting, streaming and error at all times through its icon and animation; each state looks different from the others"
+  - log: 2026-11-11T15:23:04Z @kj edited test "drive idle, streaming and error in a browser, assert data-vc-state and the icon animation (none, vc-pulse, vc-blink); connecting in jest" -> "drive idle, streaming and error in a browser, assert data-vc-state and the icon animation (none, none, vc-blink); connecting in jest"; evidence "functional A1/A2/E1: data-vc-state idle, streaming, error with animations none, vc-pulse, vc-blink; jest covers connecting" -> "functional A1/A2/E1: data-vc-state idle, streaming and error with animations none, none and vc-blink, and the streaming icon in the enabled colour with no glow; jest covers connecting"
 - [x] `ACC-MIC-47-ENABLE-COMMAND` **A5 enable command** - HIGH; the JupyterLab command voice-capture:enable starts capture when it is off and does nothing when it is already streaming; it resolves once the state is streaming and rejects with the error message when the state turns error (no permission, no microphone, insecure context, endpoint unreachable after the 10 s connect deadline)
   - evidence: jest 'enable resolves once streaming, and a second enable does nothing' and 'enable rejects with the error message: a denied microphone at once, an unreachable endpoint at the connect deadline' green, 33 of 33; Galata 'A5/A6: voice-capture:enable resolves streaming, voice-capture:disable stops, a repeat does nothing' green with the 8 capture specs, 9 passed; each red before the command existed
   - test: jest: execute enable twice, 1 getUserMedia, resolves at streaming; denied permission rejects with 'Microphone permission denied.'; Galata: execute with the fake microphone, status Connected, /stream socket open
@@ -83,6 +84,12 @@ Browser microphone capture and the status-bar control
   - test-tags: UNIT, FUNCTIONAL
   - log: 2026-11-10T22:37:39Z @kj added
   - log: 2026-11-10T23:54:35Z @kj closed: verified in v1.1.3+controls
+- [x] `ACC-MIC-76-NO-GLOW` **The streaming microphone does not glow** - MEDIUM; the microphone reads its state as a colour alone: while capture streams it shows the enabled colour with no glow, drop shadow or pulsing animation
+  - evidence: jest: the streaming microphone carries no animation class and the enabled colour; Galata: computed animation-name none and the streaming colour equals the enabled pause control
+  - test: jest and Galata: the streaming microphone icon has animation-name none and its computed colour equals the enabled control colour
+  - test-tags: UNIT, FUNCTIONAL
+  - log: 2026-11-11T14:38:38Z @kj added
+  - log: 2026-11-11T15:23:04Z @kj closed
 
 ## B. Audio format - the wire contract (frontend) `WIRE`
 
@@ -620,18 +627,22 @@ Status bar controls that act on the player: play, pause and stop
   - log: 2026-11-10T23:54:35Z @kj closed: verified in v1.1.3+controls
   - log: 2026-11-11T12:35:34Z @kj amended text "when the player plays nothing both controls are disabled and drawn grey as the disabled microphone toggle is" -> "when the player plays nothing both player controls are disabled and drawn in the same grey as the disabled microphone segment"
   - log: 2026-11-11T13:08:07Z @kj edited evidence "jest: both controls disabled when idle; Galata: the disabled colour equals the idle microphone grey, 18 passed" -> "jest: both player controls disabled when idle; Galata: the idle mic colour equals the disabled pause colour"
-- [x] `ACC-CTRL-72-BLINK` **Play icon blinks when the sink is not functional** - HIGH; when the player status reports the sink not functional, the play icon blinks in the error colour and the tooltip carries the reason
-  - evidence: jest and Galata: jp-mod-error, vc-blink animation and var(--jp-warn-color1) on the play control with the reason in the tooltip
-  - test: jest: return sink not ok from the status poll, assert the play control carries the blinking error class and the tooltip carries the reason; Galata: a lab without the voiceout sink shows the blinking play icon
+- [x] `ACC-CTRL-72-BLINK` **Play icon blinks when the sink is not functional** - HIGH; when the player status reports the sink not functional, a small amber dot on the play control blinks in the error colour for the episode and the pill border and tint stay unchanged; the tooltip says audio output is unavailable
+  - evidence: jest: dot visible and blinking at 29999 ms, hidden at 30000 ms; no jp-mod-error or jp-mod-sink-error; tooltip Play - Audio output is unavailable with no path or command; Galata: jp-VoiceCapture-dot blinks in var(--jp-warn-color0) and the pill border is unchanged
+  - test: jest: return sink not ok and assert the dot is visible and blinking, the pill has no error border, the play control has no error class and the tooltip reads Audio output is unavailable; Galata: the blinking dot is present in var(--jp-warn-color0)
   - test-tags: UNIT, FUNCTIONAL
   - log: 2026-11-10T22:43:25Z @kj added
   - log: 2026-11-10T23:54:36Z @kj closed: verified in v1.1.3+controls
-- [x] `ACC-CTRL-73-BLINK-END` **The error blink ends after 30 seconds** - HIGH; when the sink stays broken the play control blinks for 30 seconds and then stops blinking and reads as disabled, with the reason still in the tooltip
-  - evidence: jest fake timers: blink present, gone after 30 s with both controls disabled and the reason kept, recovery ends the episode and a new break blinks again; Galata: the blink class is present on load
-  - test: jest with fake timers: return sink not ok, assert the blinking class, advance 30 s, assert it is gone and the control disabled; Galata: the blink is present on load
+  - log: 2026-11-11T14:38:38Z @kj amended text "when the player status reports the sink not functional, the play icon blinks in the error colour and the tooltip carries the reason" -> "when the player status reports the sink not functional, a small amber dot on the play control blinks in the error colour for the episode and the pill border and tint stay unchanged; the tooltip says audio output is unavailable"
+  - log: 2026-11-11T15:23:04Z @kj edited test "jest: return sink not ok from the status poll, assert the play control carries the blinking error class and the tooltip carries the reason; Galata: a lab without the voiceout sink shows the blinking play icon" -> "jest: return sink not ok and assert the dot is visible and blinking, the pill has no error border, the play control has no error class and the tooltip reads Audio output is unavailable; Galata: the blinking dot is present in var(--jp-warn-color0)"; evidence "jest and Galata: jp-mod-error, vc-blink animation and var(--jp-warn-color1) on the play control with the reason in the tooltip" -> "jest: dot visible and blinking at 29999 ms, hidden at 30000 ms; no jp-mod-error or jp-mod-sink-error; tooltip Play - Audio output is unavailable with no path or command; Galata: jp-VoiceCapture-dot blinks in var(--jp-warn-color0) and the pill border is unchanged"
+- [x] `ACC-CTRL-73-BLINK-END` **The error blink ends after 30 seconds** - HIGH; when the sink stays broken the amber dot blinks for 30 seconds and then disappears, and both controls read as disabled with the plain message still in the play tooltip
+  - evidence: jest fake timers: dot visible and blinking at 29999 ms, hidden at 30000 ms with both controls disabled and the plain message kept; recovery ends the episode and a new break blinks again; Galata: the dot blinks on load
+  - test: jest with fake timers: return sink not ok, assert the dot visible and blinking, advance 29999 ms and assert it still blinks, advance 1 ms and assert it is hidden with both controls disabled; Galata: the dot blinks on load
   - test-tags: UNIT, FUNCTIONAL
   - log: 2026-11-11T12:28:19Z @kj added
   - log: 2026-11-11T13:08:07Z @kj closed: verified in the pill build
+  - log: 2026-11-11T14:38:39Z @kj amended text "when the sink stays broken the play control blinks for 30 seconds and then stops blinking and reads as disabled, with the reason still in the tooltip" -> "when the sink stays broken the amber dot blinks for 30 seconds and then disappears, and both controls read as disabled with the plain message still in the play tooltip"
+  - log: 2026-11-11T15:23:04Z @kj edited test "jest with fake timers: return sink not ok, assert the blinking class, advance 30 s, assert it is gone and the control disabled; Galata: the blink is present on load" -> "jest with fake timers: return sink not ok, assert the dot visible and blinking, advance 29999 ms and assert it still blinks, advance 1 ms and assert it is hidden with both controls disabled; Galata: the dot blinks on load"; evidence "jest fake timers: blink present, gone after 30 s with both controls disabled and the reason kept, recovery ends the episode and a new break blinks again; Galata: the blink class is present on load" -> "jest fake timers: dot visible and blinking at 29999 ms, hidden at 30000 ms with both controls disabled and the plain message kept; recovery ends the episode and a new break blinks again; Galata: the dot blinks on load"
 - [x] `ACC-CTRL-74-FLAT` **Enabled state lights the glyphs only** - MEDIUM; the playback pill paints no background tint for hover, active or pressed; an enabled control is shown by its glyph colour alone
   - evidence: jest: no inline style and no background class in any state; Galata: computed background of the pill and all three segments equal, unchanged after hover
   - test: jest: no tinted background class on any control in any state; Galata: computed background-color of the pill controls equals the pill background
@@ -644,3 +655,9 @@ Status bar controls that act on the player: play, pause and stop
   - test-tags: UNIT, FUNCTIONAL
   - log: 2026-11-11T12:33:21Z @kj added
   - log: 2026-11-11T13:08:07Z @kj closed: verified in the pill build
+- [x] `ACC-CTRL-77-PLAIN-TIP` **The sink error tooltip is written in plain words** - MEDIUM; when the audio sink is not functional the play control's tooltip says audio output is unavailable and carries no file path, FIFO, command or other technical detail
+  - evidence: jest: the play tooltip equals Play - Audio output is unavailable and holds no fifo, path or jupyterlab_voice_capture; Galata: the rendered title is the same plain message
+  - test: jest: assert the play tooltip equals the plain message and holds no path, FIFO or command
+  - test-tags: UNIT
+  - log: 2026-11-11T14:38:38Z @kj added
+  - log: 2026-11-11T15:23:04Z @kj closed

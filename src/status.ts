@@ -9,8 +9,9 @@ import { Widget } from '@lumino/widgets';
 import { VoiceCapture, VoiceCaptureState } from './voice-capture';
 
 const STATUS_POLL_MS = 2000;
-// The broken-sink episode blinks for this long, then the control reads disabled.
+// The broken-sink episode blinks for this long, then the dot disappears.
 const BLINK_MS = 30000;
+const SINK_UNAVAILABLE = 'Audio output is unavailable';
 
 const MIC_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
   <path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3z"/>
@@ -85,8 +86,9 @@ const PAUSE_LABEL = 'Pause';
  * hairline dividers. The microphone reflects exactly one of idle / connecting / streaming /
  * error (A4), animates per state and carries the state word and guide in its tooltip. The
  * player state is polled every 2 s; a click applies the response at once so the faces
- * change without waiting. While the sink is broken the play control blinks in the error
- * colour for 30 s, then reads disabled with the reason left in its tooltip.
+ * change without waiting. While the sink is broken an amber dot on the play control blinks
+ * for 30 s, then disappears and both controls read disabled with the plain message left in
+ * the play tooltip.
  */
 export class VoiceStatus extends Widget {
   constructor(model: VoiceCapture, settings: ServerConnection.ISettings) {
@@ -99,6 +101,11 @@ export class VoiceStatus extends Widget {
     this._mic = this._createMic();
     this._play = this._createControl('play');
     this._pause = this._createControl('pause');
+    this._dot = document.createElement('span');
+    this._dot.className = 'jp-VoiceCapture-dot';
+    this._dot.setAttribute('aria-hidden', 'true');
+    this._dot.hidden = true;
+    this._play.appendChild(this._dot);
     this.node.appendChild(this._mic);
     this.node.appendChild(this._divider());
     this.node.appendChild(this._play);
@@ -191,25 +198,24 @@ export class VoiceStatus extends Widget {
     this._play.dataset.vcFace = face;
 
     const broken = sink?.ok === false;
-    this.node.classList.toggle('jp-mod-sink-error', broken);
-    this._play.classList.toggle('jp-mod-error', broken);
     if (!broken) {
       this._stopBlink();
     } else if (!this._blinkDone && this._blinkTimer === null) {
-      this._play.classList.add('jp-mod-blink');
+      this._dot.hidden = false;
+      this._dot.classList.add('jp-mod-blink');
       this._blinkTimer = window.setTimeout(() => {
         this._blinkTimer = null;
         this._blinkDone = true;
-        this._play.classList.remove('jp-mod-blink');
+        this._dot.hidden = true;
+        this._dot.classList.remove('jp-mod-blink');
         this._play.disabled = true;
         this._pause.disabled = true;
       }, BLINK_MS);
     }
 
-    const label =
-      sink?.ok === false
-        ? `${PLAY_LABELS[mode]} - ${sink.reason}`
-        : PLAY_LABELS[mode];
+    const label = broken
+      ? `${PLAY_LABELS[mode]} - ${SINK_UNAVAILABLE}`
+      : PLAY_LABELS[mode];
     this._play.title = label;
     this._play.setAttribute('aria-label', label);
     this._play.disabled = this._blinkDone || mode === 'idle';
@@ -224,7 +230,8 @@ export class VoiceStatus extends Widget {
       this._blinkTimer = null;
     }
     this._blinkDone = false;
-    this._play.classList.remove('jp-mod-blink');
+    this._dot.hidden = true;
+    this._dot.classList.remove('jp-mod-blink');
   }
 
   private async _request(action: string): Promise<void> {
@@ -264,6 +271,7 @@ export class VoiceStatus extends Widget {
   private _mic: HTMLButtonElement;
   private _play: HTMLButtonElement;
   private _pause: HTMLButtonElement;
+  private _dot: HTMLSpanElement;
   private _mode: PlayerMode = 'idle';
   private _timer: number;
   private _blinkTimer: number | null = null;

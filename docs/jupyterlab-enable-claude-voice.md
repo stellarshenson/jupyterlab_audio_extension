@@ -169,7 +169,7 @@ sox /tmp/t.wav -n stat 2>&1 | grep -iE 'Maximum amplitude|RMS'
 
 ## Operation
 
-- click the status-bar mic (or palette **Toggle Voice Capture**) → the state shows through the icon and its tooltip (Connecting, then Connected), with a subtle green glow while streaming; the browser shows its active-mic indicator
+- click the status-bar mic (or palette **Toggle Voice Capture**) → the state shows through the icon and its tooltip (Connecting, then Connected), with the icon in the enabled colour and no glow while streaming; the browser shows its active-mic indicator
 - `/voice` (hold or tap) records from `voicein`; one browser tab streams at a time (last-writer-wins)
 - speak at normal-to-firm volume - RMS < 0.01 transcribes poorly
 - setting **Auto-connect on startup** (`autoConnect`, Settings → Voice Capture) starts capture as JupyterLab loads; off by default

@@ -228,7 +228,7 @@ test.describe('voice capture', () => {
       'title',
       'Connected - Voice capture on - streaming to server'
     );
-    expect(await animation(page)).toBe('vc-pulse');
+    expect(await animation(page)).toBe('none');
     expect((await record(page)).liveTracks).toBe(1);
 
     await reader.waitForRate(
@@ -887,38 +887,51 @@ test.describe('player', () => {
     expect(colours.streaming).toBe(colours.enabled);
   });
 
-  test('ACC-PLAYER-71/72: a missing speaker FIFO blinks the play control with the reason in its tooltip', async ({
+  test('ACC-PLAYER-71/ACC-CTRL-72/73/77: a missing speaker sink blinks an amber dot with a plain tooltip', async ({
     page,
     baseURL
   }) => {
     await openLab(page, `${baseURL}/lab`);
     const pill = page.locator(STATUS);
     const play = pill.locator('[data-vc-control="play"]');
-    await expect(play).toHaveClass(/jp-mod-error/);
-    await expect(play).toHaveClass(/jp-mod-blink/);
+    const warning = play.locator('.jp-VoiceCapture-dot');
+    await expect(warning).toBeVisible();
+    await expect(warning).toHaveClass(/jp-mod-blink/);
+    await expect(play).not.toHaveClass(/jp-mod-error/);
     await expect(play).toHaveAttribute('data-vc-face', 'play');
     await expect(play).toBeDisabled();
     await expect(play).toHaveAttribute(
       'title',
-      /speaker\.fifo is missing; run: jupyterlab_voice_capture start -d/
+      'Play - Audio output is unavailable'
     );
     expect(
-      await play
-        .locator(ICON)
-        .evaluate(el => getComputedStyle(el).animationName)
+      await warning.evaluate(el => getComputedStyle(el).animationName)
     ).toBe('vc-blink');
 
     const warn = await page.evaluate(() => {
       const probe = document.createElement('span');
-      probe.style.color = 'var(--jp-warn-color1)';
+      probe.style.color = 'var(--jp-warn-color0)';
       document.body.appendChild(probe);
       const colour = getComputedStyle(probe).color;
       probe.remove();
       return colour;
     });
-    expect(await play.evaluate(el => getComputedStyle(el).color)).toBe(warn);
+    expect(
+      await warning.evaluate(el => getComputedStyle(el).backgroundColor)
+    ).toBe(warn);
+
+    // The pill border and tint stay unchanged: no warning class, plain border colour.
+    await expect(pill).not.toHaveClass(/jp-mod-sink-error/);
+    const border = await page.evaluate(() => {
+      const probe = document.createElement('span');
+      probe.style.borderColor = 'var(--jp-border-color2)';
+      document.body.appendChild(probe);
+      const colour = getComputedStyle(probe).borderTopColor;
+      probe.remove();
+      return colour;
+    });
     expect(await pill.evaluate(el => getComputedStyle(el).borderTopColor)).toBe(
-      warn
+      border
     );
   });
 });
