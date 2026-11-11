@@ -11,7 +11,7 @@ import * as path from 'path';
  */
 
 const SINK = process.env.VOICE_TEST_SINK as string;
-const STATUS = '.jp-VoiceCapture-status';
+const STATUS = '.jp-VoiceCapture-status[data-vc-state]';
 const ICON = '.jp-VoiceCapture-icon';
 const BYTES_PER_SECOND = 16000 * 2; // 16 kHz, mono, 2 bytes per sample
 
@@ -199,7 +199,11 @@ test.describe('voice capture', () => {
     await openLab(page, `${baseURL}/lab`);
     const status = page.locator(STATUS);
     await expect(status).toHaveAttribute('data-vc-state', 'idle');
-    await expect(status).toHaveText('Disconnected');
+    await expect(status).toHaveText('');
+    await expect(status).toHaveAttribute(
+      'title',
+      'Disconnected - Voice capture off - click to start'
+    );
     expect(await animation(page)).toBe('none');
 
     await page.waitForTimeout(1000);
@@ -220,7 +224,10 @@ test.describe('voice capture', () => {
     await expect(status).toHaveAttribute('data-vc-state', 'streaming', {
       timeout: 15000
     });
-    await expect(status).toHaveText('Connected');
+    await expect(status).toHaveAttribute(
+      'title',
+      'Connected - Voice capture on - streaming to server'
+    );
     expect(await animation(page)).toBe('vc-pulse');
     expect((await record(page)).liveTracks).toBe(1);
 
@@ -249,7 +256,10 @@ test.describe('voice capture', () => {
 
     await status.click();
     await expect(status).toHaveAttribute('data-vc-state', 'idle');
-    await expect(status).toHaveText('Disconnected');
+    await expect(status).toHaveAttribute(
+      'title',
+      'Disconnected - Voice capture off - click to start'
+    );
     await expect
       .poll(async () => (await record(page)).liveTracks, { timeout: 1000 })
       .toBe(0);
@@ -282,14 +292,20 @@ test.describe('voice capture', () => {
       );
 
     expect(await execute('voice-capture:enable')).toBe('streaming');
-    await expect(status).toHaveText('Connected');
+    await expect(status).toHaveAttribute(
+      'title',
+      'Connected - Voice capture on - streaming to server'
+    );
     expect(await socket()).toBe('open');
     await reader.waitForBytes(BYTES_PER_SECOND / 2);
     expect(await execute('voice-capture:enable')).toBe('streaming');
     expect(await record(page)).toMatchObject({ gum: 1, sockets: 1 });
 
     expect(await execute('voice-capture:disable')).toBe('idle');
-    await expect(status).toHaveText('Disconnected');
+    await expect(status).toHaveAttribute(
+      'title',
+      'Disconnected - Voice capture off - click to start'
+    );
     await expect.poll(socket).toBe('closed');
     expect((await record(page)).liveTracks).toBe(0);
     await reader.waitForRate(page, rate => rate === 0, 1000);
@@ -305,16 +321,18 @@ test.describe('voice capture', () => {
     const status = page.locator(STATUS);
     await status.click();
     await expect(status).toHaveAttribute('data-vc-state', 'error');
-    await expect(status).toHaveText('Error');
     await expect(status).toHaveAttribute(
       'title',
-      'Microphone permission denied.'
+      'Error - Microphone permission denied.'
     );
     expect(await animation(page)).toBe('vc-blink');
 
     await status.click();
     await expect(status).toHaveAttribute('data-vc-state', 'idle');
-    await expect(status).toHaveText('Disconnected');
+    await expect(status).toHaveAttribute(
+      'title',
+      'Disconnected - Voice capture off - click to start'
+    );
     await page.waitForTimeout(1000);
     expect((await record(page)).gum).toBe(1);
   });
@@ -787,13 +805,75 @@ test.describe('player', () => {
     const posted = page.waitForRequest(
       request =>
         request.method() === 'POST' &&
-        request.url().includes('jupyterlab-voice-capture-extension/player')
+        request.url().includes('jupyterlab-voice-capture-extension/player') &&
+        (request.postData() ?? '').includes('"stop"')
     );
     await item.click();
     const request = await posted;
     expect(JSON.parse(request.postData() as string)).toEqual({
       action: 'stop'
     });
+  });
+
+  test('ACC-CTRL-66/69: the playback controls sit beside the microphone toggle and are disabled while the player is idle', async ({
+    page,
+    baseURL
+  }) => {
+    await openLab(page, `${baseURL}/lab`);
+    const mic = page.locator(STATUS);
+    const playback = page.locator('.jp-VoiceCapture-playback');
+    await expect(playback).toBeVisible();
+    await expect(playback).toHaveAttribute('data-vc-player', 'idle');
+
+    // Same status-bar row, the playback item to the right of the microphone toggle.
+    const micBox = (await mic.boundingBox())!;
+    const playbackBox = (await playback.boundingBox())!;
+    expect(playbackBox.x).toBeGreaterThan(micBox.x);
+    expect(playbackBox.y).toBeLessThan(micBox.y + micBox.height);
+    expect(playbackBox.y + playbackBox.height).toBeGreaterThan(micBox.y);
+
+    const play = playback.locator('[data-vc-control="play"]');
+    const pause = playback.locator('[data-vc-control="pause"]');
+    await expect(play).toBeDisabled();
+    await expect(pause).toBeDisabled();
+    await expect(play).toHaveAttribute('data-vc-face', 'play');
+
+    // The disabled pause control carries the idle microphone toggle's colour; the play
+    // control carries the sink error colour in a lab without the voiceout sink (ACC-CTRL-72).
+    const grey = await mic.evaluate(el => getComputedStyle(el).color);
+    expect(await pause.evaluate(el => getComputedStyle(el).color)).toBe(grey);
+  });
+
+  test('ACC-PLAYER-71/72: a missing speaker FIFO blinks the play control with the reason in its tooltip', async ({
+    page,
+    baseURL
+  }) => {
+    await openLab(page, `${baseURL}/lab`);
+    const play = page.locator(
+      '.jp-VoiceCapture-playback [data-vc-control="play"]'
+    );
+    await expect(play).toHaveClass(/jp-mod-error/);
+    await expect(play).toHaveAttribute('data-vc-face', 'play');
+    await expect(play).toBeDisabled();
+    await expect(play).toHaveAttribute(
+      'title',
+      /speaker\.fifo is missing; run: jupyterlab_voice_capture start -d/
+    );
+    expect(
+      await play
+        .locator(ICON)
+        .evaluate(el => getComputedStyle(el).animationName)
+    ).toBe('vc-blink');
+
+    const warn = await page.evaluate(() => {
+      const probe = document.createElement('span');
+      probe.style.color = 'var(--jp-warn-color1)';
+      document.body.appendChild(probe);
+      const colour = getComputedStyle(probe).color;
+      probe.remove();
+      return colour;
+    });
+    expect(await play.evaluate(el => getComputedStyle(el).color)).toBe(warn);
   });
 });
 

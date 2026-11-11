@@ -32,6 +32,11 @@ class SpeakerReader:
         # Called on the reader thread with each chunk; None while no tab listens.
         self.listener = None
 
+    @property
+    def path(self):
+        """The FIFO path this reader opens."""
+        return self._path
+
     def start(self):
         """Launch the reader thread."""
         self._thread = threading.Thread(

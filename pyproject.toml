@@ -96,3 +96,8 @@ before-publish-assets = ["""python -c "import pathlib, pypiserver; [f.write_text
 
 [tool.check-wheel-contents]
 ignore = ["W002"]
+
+[tool.pytest.ini_options]
+# Bound collection to the package tests: workflow scratch under tmp/ keeps file copies
+# whose test modules would otherwise be collected and fail without their fixtures.
+testpaths = ["jupyterlab_voice_capture_extension/tests"]

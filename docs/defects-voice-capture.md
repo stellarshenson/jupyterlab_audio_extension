@@ -185,3 +185,18 @@ Browser microphone capture, the status-bar control and the enable and disable co
   - log: 2026-11-07T13:30:52Z @kj added
   - log: 2026-11-07T13:30:58Z @kj the Star Colonel ordered the fix on 2026-11-07; deferred from review round 5 (tmp/workflows/review/state-r6.json)
   - log: 2026-11-07T13:32:06Z @kj closed: fixed: the enable command rejects when no state change comes within CONNECT_TIMEOUT_MS (10 s) while connecting; capture keeps waiting for the answer; patch tmp/workflows/review/fix-r7/c1.patch; `src/index.ts`
+
+## Virtual player `PLAYER`
+
+Server-side player and its transport state
+
+- log: 2026-11-10T23:54:47Z @kj category created
+
+- [x] `DEF-PLAYER-17-PAUSED` **Status reports paused while another file plays** - MAJOR; the paused aggregate counts any paused record, so a paused file beside a playing one reports paused true; the status bar then shows Resume with Pause disabled during real playback
+  - test-tags: UNIT
+  - evidence: Player._state now reports paused only when a record is paused and none plays; test_paused_is_false_when_a_paused_file_shares_with_a_playing_one failed with assert True is False before the fix and passes after it, pytest 89
+  - repro: play a, pause it, play b with mode now, call status: paused is true while b plays
+  - root-cause: 2026-11-10T23:54:47Z @kj paused = any(record paused) without excluding a playing record
+  - log: 2026-11-10T23:54:47Z @kj added
+  - log: 2026-11-10T23:54:47Z @kj closed: fixed in the controls change set
+  - log: 2026-11-10T23:54:53Z @kj edited test-tags added "UNIT"

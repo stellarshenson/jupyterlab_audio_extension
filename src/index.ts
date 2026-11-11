@@ -13,9 +13,13 @@ import { ISettingRegistry } from '@jupyterlab/settingregistry';
 
 import { IStatusBar } from '@jupyterlab/statusbar';
 
+// eslint-disable-next-line jupyter/prefer-lazy-imports -- activate() creates the model at once; VoiceCapture is needed for the status item
 import { CONNECT_TIMEOUT_MS, VoiceCapture } from './voice-capture';
 
+// eslint-disable-next-line jupyter/prefer-lazy-imports -- activate() registers the status item at once
 import { VoiceStatus } from './status';
+
+import { PlayerStatus } from './player-status';
 
 const PLUGIN_ID = '@stellarshenson/jupyterlab-voice-capture-extension:plugin';
 const TOGGLE_COMMAND = 'voice-capture:toggle';
@@ -119,7 +123,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
     disableChannel.onmessage = () => model.disable();
 
     app.commands.addCommand(TOGGLE_COMMAND, {
+      // eslint-disable-next-line jupyter/no-untranslated-string -- no translator
       label: 'Toggle Voice Capture',
+      describedBy: NO_ARGS,
       isToggled: () => model.enabled,
       execute: () => model.toggle()
     });
@@ -173,6 +179,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
     });
 
     if (palette) {
+      // eslint-disable-next-line jupyter/no-untranslated-string -- no translator, as for TOGGLE_COMMAND
       palette.addItem({ command: TOGGLE_COMMAND, category: 'Voice Capture' });
       palette.addItem({
         command: PLAYER_COMMAND,
@@ -189,6 +196,14 @@ const plugin: JupyterFrontEndPlugin<void> = {
           item: new VoiceStatus(model),
           align: 'left',
           rank: 100
+        }
+      );
+      statusBar.registerStatusItem(
+        'jupyterlab_voice_capture_extension:player',
+        {
+          item: new PlayerStatus(app.serviceManager.serverSettings),
+          align: 'left',
+          rank: 101
         }
       );
     }

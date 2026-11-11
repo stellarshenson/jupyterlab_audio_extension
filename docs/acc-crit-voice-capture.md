@@ -53,7 +53,7 @@ Browser microphone capture and the status-bar control
   - log: 2026-09-28T09:16:29Z @kj edited test-tags "UNIT, MANUAL" -> "UNIT, FUNCTIONAL, MANUAL"
   - log: 2026-09-28T09:16:29Z @kj closed: verified in v1.0.11
   - log: 2026-11-06T16:30:02Z @kj coded RELEASE
-- [x] `ACC-MIC-4-STATE` **A4 visible state** - HIGH; the control shows exactly one of idle (Disconnected), connecting, streaming (Connected) and error at all times; each state looks different from the others
+- [x] `ACC-MIC-4-STATE` **A4 visible state** - HIGH; the control shows exactly one of idle, connecting, streaming and error at all times through its icon and animation; each state looks different from the others
   - evidence: functional A1/A2/E1: data-vc-state idle, streaming, error with animations none, vc-pulse, vc-blink; jest covers connecting
   - test-tags: UNIT, FUNCTIONAL
   - test: drive idle, streaming and error in a browser, assert data-vc-state and the icon animation (none, vc-pulse, vc-blink); connecting in jest
@@ -62,6 +62,7 @@ Browser microphone capture and the status-bar control
   - log: 2026-09-28T09:16:29Z @kj edited test "drive idle, connecting, streaming and error, assert the status item carries exactly one jp-mod-<state> class" -> "drive idle, streaming and error in a browser, assert data-vc-state and the icon animation (none, vc-pulse, vc-blink); connecting in jest"; test-tags added "UNIT, FUNCTIONAL"
   - log: 2026-09-28T09:16:29Z @kj closed: verified in v1.0.11
   - log: 2026-11-06T16:30:02Z @kj coded STATE
+  - log: 2026-11-10T22:37:39Z @kj amended text "the control shows exactly one of idle (Disconnected), connecting, streaming (Connected) and error at all times; each state looks different from the others" -> "the control shows exactly one of idle, connecting, streaming and error at all times through its icon and animation; each state looks different from the others"
 - [x] `ACC-MIC-47-ENABLE-COMMAND` **A5 enable command** - HIGH; the JupyterLab command voice-capture:enable starts capture when it is off and does nothing when it is already streaming; it resolves once the state is streaming and rejects with the error message when the state turns error (no permission, no microphone, insecure context, endpoint unreachable after the 10 s connect deadline)
   - evidence: jest 'enable resolves once streaming, and a second enable does nothing' and 'enable rejects with the error message: a denied microphone at once, an unreachable endpoint at the connect deadline' green, 33 of 33; Galata 'A5/A6: voice-capture:enable resolves streaming, voice-capture:disable stops, a repeat does nothing' green with the 8 capture specs, 9 passed; each red before the command existed
   - test: jest: execute enable twice, 1 getUserMedia, resolves at streaming; denied permission rejects with 'Microphone permission denied.'; Galata: execute with the fake microphone, status Connected, /stream socket open
@@ -76,6 +77,12 @@ Browser microphone capture and the status-bar control
   - log: 2026-11-07T12:41:25Z @kj added
   - log: 2026-11-07T12:48:51Z @kj closed: built in workflow tmp/workflows/mic; reason: quotes two test names in full
   - log: 2026-11-07T14:08:45Z @kj live v1.1.1 in the Star Colonel's lab: jupyterlab-commands execute voice-capture:disable exit 0; a 2 s parec from voicein afterwards delivered 0 samples; a second disable exit 0; jupyterlab-commands list shows 'Disable Voice Capture'
+- [x] `ACC-MIC-70-NO-LABEL` **State text only in the tooltip** - HIGH; the status bar microphone control shows no text, and the state text (Disconnected, Connecting, Connected, Error) appears only in the control's tooltip
+  - evidence: jest status spec: no text content in any state and the tooltip carries the state word; Galata A1: the status node has no text
+  - test: jest: render each state, assert the node carries no visible text and the title carries the state text; Galata: the status item shows an icon only
+  - test-tags: UNIT, FUNCTIONAL
+  - log: 2026-11-10T22:37:39Z @kj added
+  - log: 2026-11-10T23:54:35Z @kj closed: verified in v1.1.3+controls
 
 ## B. Audio format - the wire contract (frontend) `WIRE`
 
@@ -571,3 +578,47 @@ Server-side virtual player: one command, a queue and parallel playback, in-memor
   - test-tags: MANUAL
   - log: 2026-11-08T22:44:05Z @kj added
   - log: 2026-11-09T01:31:50Z @kj closed
+- [x] `ACC-PLAYER-71-SINK` **Sink health in the player status** - HIGH; the player status action reports whether the audio sink is functional and names the cause when it is not
+  - evidence: pytest: a missing speaker FIFO reports sink ok false naming the path and jupyterlab_voice_capture start -d; a present FIFO reports ok true, 89 passed
+  - test: call the player route with status while /run/voice/speaker.fifo is absent, assert the sink is reported not ok and the reason names the missing FIFO and the start command
+  - test-tags: UNIT, FUNCTIONAL
+  - log: 2026-11-10T22:43:24Z @kj added
+  - log: 2026-11-10T23:54:35Z @kj closed: verified in v1.1.3+controls
+
+## Playback controls (status bar) `CTRL`
+
+Status bar controls that act on the player: play, pause and stop
+
+- log: 2026-11-10T22:26:49Z @kj category created
+
+- [x] `ACC-CTRL-66-CONTROLS` **Playback controls in the status bar** - HIGH; the status bar shows a play control and a pause control beside the microphone toggle
+  - evidence: jest player-status spec: the status bar item holds exactly two control buttons, one play/stop and one pause; Galata: the playback item renders beside the microphone toggle, 18 passed
+  - test: open the lab, assert both controls sit in the status bar next to the capture toggle
+  - test-tags: UNIT, FUNCTIONAL
+  - log: 2026-11-10T22:26:49Z @kj added
+  - log: 2026-11-10T23:54:35Z @kj closed: verified in v1.1.3+controls
+- [x] `ACC-CTRL-67-STOP-FACE` **Play reads as stop while playing** - HIGH; while a file plays the play control shows stop, and when nothing plays it shows play
+  - evidence: jest: playing shows the stop face and idle shows play; Galata: the idle face is play
+  - test: play a file, assert the control shows stop; stop it, assert play
+  - test-tags: UNIT, FUNCTIONAL
+  - log: 2026-11-10T22:26:49Z @kj added
+  - log: 2026-11-10T23:54:35Z @kj closed: verified in v1.1.3+controls
+- [x] `ACC-CTRL-68-LIT` **Controls act while playing** - HIGH; while a file plays both controls are enabled and run the matching player action
+  - evidence: jest: while playing both controls are enabled and clicks post stop, pause and resume to the player route
+  - test: play a file, click pause, assert the player pauses; click resume, assert it continues
+  - test-tags: UNIT
+  - log: 2026-11-10T22:26:49Z @kj added
+  - log: 2026-11-10T23:54:35Z @kj edited test-tags "UNIT, E2E" -> "UNIT"
+  - log: 2026-11-10T23:54:35Z @kj closed: verified in v1.1.3+controls
+- [x] `ACC-CTRL-69-GREYED` **Controls disabled when idle** - HIGH; when the player plays nothing both controls are disabled and drawn grey as the disabled microphone toggle is
+  - evidence: jest: both controls disabled when idle; Galata: the disabled colour equals the idle microphone grey, 18 passed
+  - test: with nothing playing, assert both controls are disabled and carry the grey style of the disabled capture toggle
+  - test-tags: UNIT, E2E
+  - log: 2026-11-10T22:26:49Z @kj added
+  - log: 2026-11-10T23:54:35Z @kj closed: verified in v1.1.3+controls
+- [x] `ACC-CTRL-72-BLINK` **Play icon blinks when the sink is not functional** - HIGH; when the player status reports the sink not functional, the play icon blinks in the error colour and the tooltip carries the reason
+  - evidence: jest and Galata: jp-mod-error, vc-blink animation and var(--jp-warn-color1) on the play control with the reason in the tooltip
+  - test: jest: return sink not ok from the status poll, assert the play control carries the blinking error class and the tooltip carries the reason; Galata: a lab without the voiceout sink shows the blinking play icon
+  - test-tags: UNIT, FUNCTIONAL
+  - log: 2026-11-10T22:43:25Z @kj added
+  - log: 2026-11-10T23:54:36Z @kj closed: verified in v1.1.3+controls

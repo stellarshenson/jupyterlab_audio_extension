@@ -8,6 +8,8 @@ token auth.
 """
 
 import functools
+import os
+import stat
 
 import tornado.web
 from jupyter_server.auth.decorator import ws_authenticated
@@ -147,8 +149,9 @@ class PlayerHandler(APIHandler):
     refused request answers 400 with a message naming the problem.
     """
 
-    def initialize(self, player=None):
+    def initialize(self, player=None, speaker=None):
         self._player = player
+        self._speaker = speaker
 
     @tornado.web.authenticated
     def post(self, *args, **kwargs):
@@ -165,7 +168,32 @@ class PlayerHandler(APIHandler):
                 raise ValueError(f"Unknown action {action!r}")
         except ValueError as exc:
             raise tornado.web.HTTPError(400, str(exc)) from exc
+        state["sink"] = _sink_state(self._speaker.path)
         self.write(state)
+
+
+def _sink_state(path):
+    """Report whether the speaker FIFO exists as a FIFO; metadata only, starts nothing.
+
+    The reader thread survives a missing FIFO by retrying, so its liveness says nothing
+    about the sink. A stale FIFO left by a killed daemon reads as ok: detecting a writer
+    needs opening the FIFO or probing PulseAudio, which is out of scope of ACC-PLAYER-71.
+    """
+    try:
+        mode = os.stat(path).st_mode
+    except OSError:
+        return {
+            "ok": False,
+            "reason": f"Speaker FIFO {path} is missing; "
+            "run: jupyterlab_voice_capture start -d",
+        }
+    if not stat.S_ISFIFO(mode):
+        return {
+            "ok": False,
+            "reason": f"Speaker FIFO {path} is not a FIFO; "
+            "run: jupyterlab_voice_capture start -d",
+        }
+    return {"ok": True, "reason": ""}
 
 
 def _remove_previous_routes(web_app, prefix):
@@ -209,6 +237,6 @@ def setup_route_handlers(web_app, sink, reader, player):
     handlers = [
         (stream_route, VoiceCaptureWebSocketHandler, {"sink": sink}),
         (speaker_route, SpeakerWebSocketHandler, {"reader": reader}),
-        (player_route, PlayerHandler, {"player": player}),
+        (player_route, PlayerHandler, {"player": player, "speaker": reader}),
     ]
     web_app.add_handlers(host_pattern, handlers)

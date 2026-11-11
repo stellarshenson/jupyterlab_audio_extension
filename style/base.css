@@ -23,14 +23,39 @@
   height: 16px;
 }
 
-.jp-VoiceCapture-label {
-  font-size: var(--jp-ui-font-size0);
-  line-height: 1;
+/* The playback root is a container, not a click target; its two buttons are. */
+.jp-VoiceCapture-playback {
+  cursor: default;
+}
+
+.jp-VoiceCapture-control {
+  display: flex;
+  align-items: center;
+  padding: 4px;
+  border: none;
+  background: none;
+  color: var(--jp-ui-font-color1);
+  cursor: pointer;
+}
+
+/* Disabled controls carry the idle microphone toggle's grey. */
+.jp-VoiceCapture-control:disabled {
+  color: var(--jp-ui-font-color2);
+  cursor: default;
+}
+
+/* A non-functional sink colours the play control as the microphone error does, disabled or not. */
+.jp-VoiceCapture-control.jp-mod-error,
+.jp-VoiceCapture-control.jp-mod-error:disabled {
+  color: var(--jp-warn-color1);
+}
+
+.jp-VoiceCapture-control.jp-mod-error .jp-VoiceCapture-icon {
+  animation: vc-blink 1s steps(1, end) infinite;
 }
 
 /*
-  State colours apply to the whole control (icon + label); animations are scoped to the
-  icon only so the label text stays steady and readable.
+  State colours apply to the whole control; animations are scoped to the icon only.
   disconnected: neutral | connecting: blue fade | connected: green glow pulse | error: orange blink
 */
 .jp-VoiceCapture-status.jp-mod-connecting {
@@ -47,12 +72,6 @@
 
 .jp-VoiceCapture-status.jp-mod-connecting .jp-VoiceCapture-icon {
   animation: vc-fade 1.2s ease-in-out infinite;
-}
-
-/* animated trailing dots after the "Connecting" label */
-.jp-VoiceCapture-status.jp-mod-connecting .jp-VoiceCapture-label::after {
-  content: '';
-  animation: vc-dots 1.2s steps(1, end) infinite;
 }
 
 .jp-VoiceCapture-status.jp-mod-streaming .jp-VoiceCapture-icon {
@@ -99,25 +118,5 @@
 
   50% {
     opacity: 0.4;
-  }
-}
-
-/* connecting: animated trailing dots */
-@keyframes vc-dots {
-  0% {
-    content: '';
-  }
-
-  25% {
-    content: '.';
-  }
-
-  50% {
-    content: '..';
-  }
-
-  75%,
-  100% {
-    content: '...';
   }
 }

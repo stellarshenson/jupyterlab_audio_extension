@@ -16,6 +16,9 @@ jest.mock('../status', () => ({
     constructor(readonly model: VoiceCapture) {}
   }
 }));
+jest.mock('../player-status', () => ({
+  PlayerStatus: class {}
+}));
 
 /**
  * Browser-side lifecycle tests. The Web Audio + WebSocket APIs are not implemented by
@@ -407,7 +410,11 @@ function activatePlugin(): {
     } as any,
     null,
     {
-      registerStatusItem: (_id: string, options: any) => (status = options.item)
+      registerStatusItem: (id: string, options: any) => {
+        if (id === 'jupyterlab_voice_capture_extension:status') {
+          status = options.item;
+        }
+      }
     } as any,
     null
   );

@@ -197,6 +197,24 @@ def test_play_now_mixes_with_what_is_playing(tmp_path):
         player.close()
 
 
+def test_paused_is_false_when_a_paused_file_shares_with_a_playing_one(tmp_path):
+    # paused describes what is heard: a play now beside a paused record is audible, so
+    # the aggregate is false even though a record is paused.
+    a, b = _files(tmp_path, "a.wav", "b.wav")
+    spawn = Spawns()
+    player = Player(str(tmp_path), spawn=spawn, clock=Clock())
+    try:
+        player.play("a.wav")
+        assert player.pause()["paused"] is True
+
+        state = player.play("b.wav", mode="now")
+        assert state["paused"] is False
+        assert _paths(state, "playing") == [a, b]  # start order
+        assert state["queue"] == []
+    finally:
+        player.close()
+
+
 def test_pause_freezes_the_position_and_resume_continues_it(tmp_path):
     a, = _files(tmp_path, "a.wav")
     spawn = Spawns()

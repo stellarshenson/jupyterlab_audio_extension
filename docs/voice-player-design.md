@@ -59,11 +59,12 @@ An unknown action, a missing `path` on `play`, a path outside the Jupyter root, 
   "paused": false,
   "stopped": false,
   "playing": [{ "id": 1, "path": "media/a.mp3", "position_s": 12.4 }],
-  "queue": [{ "id": 2, "path": "media/b.wav" }]
+  "queue": [{ "id": 2, "path": "media/b.wav" }],
+  "sink": { "ok": true, "reason": "" }
 }
 ```
 
-`playing` lists the files that are playing or paused, in start order; a paused record stays in it with its position frozen. `queue` lists the files that wait, in play order. `position_s` is the seconds played since the file started, minus the time spent paused. `paused` is true while a record is paused, and `stopped` is the gate that `stop` sets.
+`playing` lists the files that are playing or paused, in start order; a paused record stays in it with its position frozen. `queue` lists the files that wait, in play order. `position_s` is the seconds played since the file started, minus the time spent paused. `paused` is true while a record is paused and none is playing, and `stopped` is the gate that `stop` sets. `sink` reports whether the speaker FIFO exists as a FIFO; when it does not, the reason names the path and the command that loads the voiceout sink.
 
 ### 2.3 Route and palette entry
 

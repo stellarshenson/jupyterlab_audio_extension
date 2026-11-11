@@ -29,9 +29,10 @@ const TITLES: Record<VoiceCaptureState, string> = {
 };
 
 /**
- * Status-bar control: a microphone icon plus a status label, reflecting exactly one of
- * idle / connecting / streaming / error (A4). The icon animates per state - the streaming
- * state pulses faint green with a glow, the error state blinks orange (see base.css).
+ * Status-bar control: a microphone icon, reflecting exactly one of idle / connecting /
+ * streaming / error (A4). The state word and the guide text live in the tooltip. The icon
+ * animates per state - the streaming state pulses faint green with a glow, the error state
+ * blinks orange (see base.css).
  */
 export class VoiceStatus extends Widget {
   constructor(model: VoiceCapture) {
@@ -43,11 +44,7 @@ export class VoiceStatus extends Widget {
     icon.className = 'jp-VoiceCapture-icon';
     micIcon.element({ container: icon });
 
-    this._label = document.createElement('span');
-    this._label.className = 'jp-VoiceCapture-label';
-
     this.node.appendChild(icon);
-    this.node.appendChild(this._label);
     this.node.addEventListener('click', this._onClick);
 
     model.stateChanged.connect(this._refresh, this);
@@ -72,11 +69,10 @@ export class VoiceStatus extends Widget {
     this.removeClass('jp-mod-error');
     this.addClass(`jp-mod-${state}`);
     this.node.dataset.vcState = state;
-    this._label.textContent = LABELS[state];
-    this.node.title =
+    const title =
       state === 'error' ? this._model.message || TITLES.error : TITLES[state];
+    this.node.title = `${LABELS[state]} - ${title}`;
   }
 
-  private _label: HTMLSpanElement;
   private _model: VoiceCapture;
 }

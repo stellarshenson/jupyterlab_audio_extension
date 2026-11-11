@@ -146,10 +146,11 @@ class Player:
     def _state(self):
         playing = []
         queue = []
-        paused = False
+        paused = any(
+            record.state == "paused" for record in self._records
+        ) and not any(record.state == "playing" for record in self._records)
         for record in self._records:
             if record.state in ACTIVE:
-                paused = paused or record.state == "paused"
                 playing.append(
                     {
                         "id": record.id,

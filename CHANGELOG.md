@@ -2,6 +2,21 @@
 
 <!-- <START NEW CHANGELOG ENTRY> -->
 
+## [1.1.4] - 2026-11-11
+
+### Added
+
+- Status bar playback controls beside the microphone icon: a play/stop control and a pause control, enabled while a file plays, where the first shows stop and stops, the second pauses, and while paused the first shows play and resumes; with nothing playing both are disabled and greyed, each with a 24x24 hit box
+- The player status reports whether the audio sink is functional (`sink` with `ok` and `reason`), and the play control blinks in the warning colour with the reason in its tooltip when the speaker FIFO is missing
+
+### Changed
+
+- The microphone status control shows no text; its state word appears only in the tooltip
+
+### Fixed
+
+- The player state reports `paused` only when a record is paused and none is playing, so the controls no longer show Resume with Pause disabled during playback
+
 ## [1.1.3] - 2026-11-10
 
 ### Added

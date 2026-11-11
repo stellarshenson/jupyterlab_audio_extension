@@ -190,7 +190,7 @@ export class VoiceCapture {
     let ws: WebSocket;
     try {
       ws = new WebSocket(voiceCaptureWsUrl(this._serverSettings));
-    } catch (err) {
+    } catch {
       this._scheduleReconnect();
       return;
     }

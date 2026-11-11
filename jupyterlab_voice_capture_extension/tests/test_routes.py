@@ -392,6 +392,13 @@ async def _player(jp_fetch, body, headers=None):
     )
 
 
+def _player_state(response):
+    """The response state without the sink report, which the sink tests cover."""
+    state = json.loads(response.body)
+    state.pop("sink")
+    return state
+
+
 def _player_message(refused):
     """The message from the 400 the player route returned."""
     return json.loads(refused.value.response.body)["message"]
@@ -421,7 +428,33 @@ async def test_player_route_requires_the_token(jp_fetch):
 async def test_player_route_returns_the_empty_state(jp_fetch):
     response = await _player(jp_fetch, {"action": "status"})
     assert response.code == 200
-    assert json.loads(response.body) == EMPTY_PLAYER
+    assert _player_state(response) == EMPTY_PLAYER
+
+
+async def test_player_status_reports_a_missing_speaker_fifo(jp_fetch, speaker_path):
+    # ACC-PLAYER-71: the status action names the missing voiceout sink and the command that
+    # loads it.
+    response = await _player(jp_fetch, {"action": "status"})
+    sink = json.loads(response.body)["sink"]
+    assert sink["ok"] is False
+    assert speaker_path in sink["reason"]
+    assert "jupyterlab_voice_capture start -d" in sink["reason"]
+
+
+async def test_player_status_reports_a_functional_speaker_fifo(jp_fetch, speaker_path):
+    # ACC-PLAYER-71: module-pipe-sink created the FIFO, so the sink is functional.
+    os.mkfifo(speaker_path)
+    response = await _player(jp_fetch, {"action": "status"})
+    assert json.loads(response.body)["sink"] == {"ok": True, "reason": ""}
+
+
+async def test_player_status_names_a_speaker_path_that_is_not_a_fifo(jp_fetch, speaker_path):
+    with open(speaker_path, "wb"):
+        pass
+    response = await _player(jp_fetch, {"action": "status"})
+    sink = json.loads(response.body)["sink"]
+    assert sink["ok"] is False
+    assert "is not a FIFO" in sink["reason"]
 
 
 async def test_player_route_names_an_unknown_action_and_changes_nothing(jp_fetch):
@@ -430,7 +463,7 @@ async def test_player_route_names_an_unknown_action_and_changes_nothing(jp_fetch
     assert refused.value.code == 400
     assert "explode" in _player_message(refused)
     response = await _player(jp_fetch, {"action": "status"})
-    assert json.loads(response.body) == EMPTY_PLAYER
+    assert _player_state(response) == EMPTY_PLAYER
 
 
 async def test_player_route_names_a_missing_path(jp_fetch):
@@ -467,7 +500,7 @@ async def test_player_route_refuses_a_file_that_does_not_decode(
     assert refused.value.code == 400
     assert "not-audio.wav" in _player_message(refused)
     response = await _player(jp_fetch, {"action": "status"})
-    assert json.loads(response.body) == EMPTY_PLAYER
+    assert _player_state(response) == EMPTY_PLAYER
 
 
 def _player_pids(root):
