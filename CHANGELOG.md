@@ -2,6 +2,16 @@
 
 <!-- <START NEW CHANGELOG ENTRY> -->
 
+## [1.1.8] - 2026-11-11
+
+### Changed
+
+- The status bar pill is 20 px high with a 4 px radius, its controls 22 px wide with 15 px icons and 11 px dividers, and the hollow lamp ring 1 px; a 1 px pill gap keeps adjacent control target centres 25 px apart
+
+### Fixed
+
+- The lamp tooltip reported the voice-capture state; it now states the audio-system state - ready, in use, shut down or unavailable - in plain words, with no path, FIFO or command
+
 ## [1.1.7] - 2026-11-11
 
 ### Added

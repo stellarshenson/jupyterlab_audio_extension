@@ -833,10 +833,21 @@ test.describe('player', () => {
     await expect(pause).toBeVisible();
     await expect(pill.locator('.jp-VoiceCapture-divider')).toHaveCount(3);
 
+    // The smaller squircle: 4 px corners, 22 px controls and 15 px icons.
+    expect(
+      await pill.evaluate(el => getComputedStyle(el).borderTopLeftRadius)
+    ).toBe('4px');
+    const icon = mic.locator('svg');
+    expect(await icon.evaluate(el => getComputedStyle(el).width)).toBe('15px');
+    expect(await icon.evaluate(el => getComputedStyle(el).height)).toBe('15px');
+
     // The three segments sit inside the one pill, in a single row.
     const pillBox = (await pill.boundingBox())!;
     for (const control of [mic, play, pause]) {
       const box = (await control.boundingBox())!;
+      expect(await control.evaluate(el => getComputedStyle(el).width)).toBe(
+        '22px'
+      );
       expect(box.x).toBeGreaterThanOrEqual(pillBox.x);
       expect(box.x + box.width).toBeLessThanOrEqual(
         pillBox.x + pillBox.width + 0.5
@@ -896,7 +907,12 @@ test.describe('player', () => {
     const play = pill.locator('[data-vc-control="play"]');
     const lamp = pill.locator('.jp-VoiceCapture-lamp');
     await expect(lamp).toHaveAttribute('data-vc-lamp', 'fault');
-    await expect(lamp).toHaveAttribute('aria-hidden', 'true');
+    await expect(lamp).toHaveAttribute('role', 'img');
+    await expect(lamp).toHaveAttribute('title', 'Audio system unavailable');
+    await expect(lamp).toHaveAttribute(
+      'aria-label',
+      'Audio system unavailable'
+    );
     await expect(play).not.toHaveClass(/jp-mod-error/);
     await expect(play).toHaveAttribute('data-vc-face', 'play');
     await expect(play).toBeDisabled();
@@ -953,6 +969,7 @@ test.describe('player', () => {
       await expect(lamp).toHaveAttribute('data-vc-lamp', 'ready', {
         timeout: 10000
       });
+      await expect(lamp).toHaveAttribute('title', 'Audio system ready');
       await expect(pill.locator('[data-vc-control="play"]')).toBeDisabled();
       await expect(pill.locator('[data-vc-control="pause"]')).toBeDisabled();
     } finally {
@@ -980,12 +997,13 @@ test.describe('player', () => {
       await expect(lamp).toHaveAttribute('data-vc-lamp', 'off', {
         timeout: 10000
       });
+      await expect(lamp).toHaveAttribute('title', 'Audio system shut down');
       expect(
         await lamp.evaluate(el => getComputedStyle(el).backgroundColor)
       ).toBe('rgba(0, 0, 0, 0)');
       expect(
         await lamp.evaluate(el => getComputedStyle(el).boxShadow)
-      ).toContain('inset');
+      ).toContain('0px 0px 0px 1px inset');
       expect(
         await lamp.evaluate(el => getComputedStyle(el).animationName)
       ).toBe('none');

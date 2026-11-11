@@ -8,12 +8,12 @@
 .jp-VoiceCapture-status.jp-VoiceCapture-pill {
   display: flex;
   align-items: center;
-  gap: 0;
+  gap: 1px;
   box-sizing: border-box;
-  height: 22px;
+  height: 20px;
   padding: 0;
   border: 1px solid var(--jp-border-color2);
-  border-radius: 7px;
+  border-radius: 4px;
   background: none;
   cursor: default;
   color: var(--jp-ui-font-color2);
@@ -21,7 +21,7 @@
 
 .jp-VoiceCapture-divider {
   width: 1px;
-  height: 12px;
+  height: 11px;
   background: var(--jp-border-color2);
 }
 
@@ -31,8 +31,8 @@
 }
 
 .jp-VoiceCapture-status svg {
-  width: 16px;
-  height: 16px;
+  width: 15px;
+  height: 15px;
 }
 
 .jp-VoiceCapture-control {
@@ -40,7 +40,7 @@
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
-  width: 24px;
+  width: 22px;
   height: 100%;
   padding: 0;
   border: none;
@@ -71,14 +71,14 @@
   flex: none;
   width: 6px;
   height: 6px;
-  margin: 0 4px;
+  margin: 0 3px;
   border-radius: 50%;
   background: #93a0aa;
 }
 
 .jp-VoiceCapture-lamp[data-vc-lamp='off'] {
   background: transparent;
-  box-shadow: inset 0 0 0 1.5px #93a0aa;
+  box-shadow: inset 0 0 0 1px #93a0aa;
 }
 
 .jp-VoiceCapture-lamp[data-vc-lamp='active'] {
@@ -91,7 +91,7 @@
 
 [data-jp-theme-light='true'] .jp-VoiceCapture-lamp[data-vc-lamp='off'] {
   background: transparent;
-  box-shadow: inset 0 0 0 1.5px #4a535b;
+  box-shadow: inset 0 0 0 1px #4a535b;
 }
 
 [data-jp-theme-light='true'] .jp-VoiceCapture-lamp[data-vc-lamp='active'] {

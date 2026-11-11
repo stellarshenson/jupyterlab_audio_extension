@@ -94,6 +94,16 @@ function lamp(widget: VoiceStatus): string | undefined {
     ?.dataset.vcLamp;
 }
 
+/** The lamp's plain audio-system tooltip; its title and aria-label must agree. */
+function lampTitle(widget: VoiceStatus): string {
+  const element = widget.node.querySelector<HTMLElement>(
+    '.jp-VoiceCapture-lamp'
+  )!;
+  const title = element.title;
+  expect(element.getAttribute('aria-label')).toBe(title);
+  return title;
+}
+
 let request: jest.SpyInstance;
 
 beforeEach(() => {
@@ -142,7 +152,9 @@ describe('VoiceStatus pill', () => {
     ]);
     const lampElement = widget.node.querySelector('.jp-VoiceCapture-lamp');
     expect(lampElement).not.toBeNull();
-    expect(lampElement!.getAttribute('aria-hidden')).toBe('true');
+    expect(lampElement!.getAttribute('role')).toBe('img');
+    expect(lampElement!.getAttribute('aria-label')).toBe('Audio system ready');
+    expect((lampElement as HTMLElement).title).toBe('Audio system ready');
     const { mic, play, pause } = controls(widget);
     expect(mic.querySelector('svg')).not.toBeNull();
     expect(play.querySelector('svg')).not.toBeNull();
@@ -311,6 +323,7 @@ describe('VoiceStatus player controls', () => {
     const { root, mic, play, pause } = controls(widget);
 
     expect(lamp(widget)).toBe('fault');
+    expect(lampTitle(widget)).toBe('Audio system unavailable');
     expect(mic.disabled).toBe(false);
     expect(play.classList.contains('jp-mod-error')).toBe(false);
     expect(pause.classList.contains('jp-mod-error')).toBe(false);
@@ -381,6 +394,7 @@ describe('VoiceStatus lamp', () => {
     const { play, pause } = controls(widget);
 
     expect(lamp(widget)).toBe('ready');
+    expect(lampTitle(widget)).toBe('Audio system ready');
     expect(play.disabled).toBe(true);
     expect(pause.disabled).toBe(true);
 
@@ -393,12 +407,14 @@ describe('VoiceStatus lamp', () => {
     await settle();
     const { play, pause } = controls(widget);
     expect(lamp(widget)).toBe('active');
+    expect(lampTitle(widget)).toBe('Audio system in use');
     expect(play.disabled).toBe(false);
 
     request.mockImplementation(async () => response(PAUSED));
     pause.click();
     await settle();
     expect(lamp(widget)).toBe('ready');
+    expect(lampTitle(widget)).toBe('Audio system ready');
     expect(play.disabled).toBe(false);
     expect(pause.disabled).toBe(true);
 
@@ -409,19 +425,23 @@ describe('VoiceStatus lamp', () => {
     const { widget, model } = create();
     await settle();
     expect(lamp(widget)).toBe('ready');
+    expect(lampTitle(widget)).toBe('Audio system ready');
 
     model.state = 'connecting';
     model.stateChanged.emit('connecting');
     expect(lamp(widget)).toBe('ready');
+    expect(lampTitle(widget)).toBe('Audio system ready');
 
     model.state = 'streaming';
     model.stateChanged.emit('streaming');
     expect(lamp(widget)).toBe('active');
+    expect(lampTitle(widget)).toBe('Audio system in use');
 
     // A capture error does not change the lamp.
     model.state = 'error';
     model.stateChanged.emit('error');
     expect(lamp(widget)).toBe('ready');
+    expect(lampTitle(widget)).toBe('Audio system ready');
 
     widget.dispose();
   });
@@ -435,6 +455,7 @@ describe('VoiceStatus lamp', () => {
     const { mic, play, pause } = controls(widget);
 
     expect(lamp(widget)).toBe('off');
+    expect(lampTitle(widget)).toBe('Audio system shut down');
     expect(play.disabled).toBe(true);
     expect(pause.disabled).toBe(true);
     expect(mic.disabled).toBe(false);
@@ -461,16 +482,19 @@ describe('VoiceStatus blink limit', () => {
     await jest.advanceTimersByTimeAsync(0);
     const { play, pause } = controls(widget);
     expect(lamp(widget)).toBe('fault');
+    expect(lampTitle(widget)).toBe('Audio system unavailable');
     expect(play.disabled).toBe(false);
     expect(pause.disabled).toBe(false);
 
     await jest.advanceTimersByTimeAsync(29999);
     expect(lamp(widget)).toBe('fault');
+    expect(lampTitle(widget)).toBe('Audio system unavailable');
     expect(play.disabled).toBe(false);
     expect(pause.disabled).toBe(false);
 
     await jest.advanceTimersByTimeAsync(1);
     expect(lamp(widget)).toBe('off');
+    expect(lampTitle(widget)).toBe('Audio system unavailable');
     expect(play.disabled).toBe(true);
     expect(pause.disabled).toBe(true);
     expect(play.title).toBe('Stop - Audio output is unavailable');
@@ -479,6 +503,7 @@ describe('VoiceStatus blink limit', () => {
     state = { ...PLAYING, sink: SINK_READY };
     await jest.advanceTimersByTimeAsync(2000);
     expect(lamp(widget)).toBe('active');
+    expect(lampTitle(widget)).toBe('Audio system in use');
     expect(play.disabled).toBe(false);
     expect(play.title).toBe('Stop');
 
@@ -486,6 +511,7 @@ describe('VoiceStatus blink limit', () => {
     state = { ...PLAYING, sink: SINK_MISSING };
     await jest.advanceTimersByTimeAsync(2000);
     expect(lamp(widget)).toBe('fault');
+    expect(lampTitle(widget)).toBe('Audio system unavailable');
     expect(play.disabled).toBe(false);
 
     widget.dispose();

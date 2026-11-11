@@ -104,7 +104,7 @@ export class VoiceStatus extends Widget {
 
     this._lamp = document.createElement('span');
     this._lamp.className = 'jp-VoiceCapture-lamp';
-    this._lamp.setAttribute('aria-hidden', 'true');
+    this._lamp.setAttribute('role', 'img');
     this._mic = this._createMic();
     this._play = this._createControl('play');
     this._pause = this._createControl('pause');
@@ -245,6 +245,17 @@ export class VoiceStatus extends Widget {
       lamp = 'ready';
     }
     this._lamp.dataset.vcLamp = lamp;
+    // The lamp names the whole audio system, not the voice-capture state.
+    const title =
+      this._sink === 'missing'
+        ? 'Audio system unavailable'
+        : this._sink === 'off'
+          ? 'Audio system shut down'
+          : lamp === 'active'
+            ? 'Audio system in use'
+            : 'Audio system ready';
+    this._lamp.title = title;
+    this._lamp.setAttribute('aria-label', title);
   }
 
   /** A shutdown and a settled fault disable both player controls; otherwise the mode decides. */

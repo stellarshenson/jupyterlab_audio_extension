@@ -200,3 +200,10 @@ Server-side player and its transport state
   - log: 2026-11-10T23:54:47Z @kj added
   - log: 2026-11-10T23:54:47Z @kj closed: fixed in the controls change set
   - log: 2026-11-10T23:54:53Z @kj edited test-tags added "UNIT"
+- [x] `DEF-PLAYER-18-LAMP-TOOLTIP` **Lamp tooltip reports voice capture instead of the audio system** - MINOR; the status-bar lamp reports the voice-capture state in its tooltip, inherited from the pill, so hovering the indicator says nothing about the audio system; the lamp must name the audio-system state: ready, in use, shut down or unavailable
+  - evidence: jest 6 suites / 62 tests pass: lamp role=img with title and aria-label Audio system ready at idle, in use while playing or streaming, unavailable on missing, shut down after a deliberate shutdown; Galata 20 passed, 0 failed: lamp title unavailable, ready and shut down
+  - repro: hover the lamp in the status bar: the tooltip reads the pill line Disconnected - Voice capture off - click to start, not the audio-system state
+  - test-tags: UNIT, FUNCTIONAL
+  - root-cause: 2026-11-11T21:54:38Z @kj the lamp carried aria-hidden and no title or aria-label; the browser fell back to the parent pill title set in _refresh() (src/status.ts:188-192), so the lamp had no audio-system words
+  - log: 2026-11-11T21:54:38Z @kj added
+  - log: 2026-11-11T21:54:44Z @kj closed
