@@ -20,6 +20,8 @@ from tornado.ioloop import IOLoop
 from tornado.routing import PathMatches, RuleRouter
 from tornado.websocket import WebSocketClosedError, WebSocketHandler
 
+from .speaker import STOP_MARKER_NAME
+
 # Close code sent to a producer that a newer connection replaced (D3). The frontend stops
 # capture on it instead of reconnecting, so two tabs never take the stream back and forth.
 SUPERSEDED_CLOSE_CODE = 4001
@@ -173,27 +175,16 @@ class PlayerHandler(APIHandler):
 
 
 def _sink_state(path):
-    """Report whether the speaker FIFO exists as a FIFO; metadata only, starts nothing.
-
-    The reader thread survives a missing FIFO by retrying, so its liveness says nothing
-    about the sink. A stale FIFO left by a killed daemon reads as ok: detecting a writer
-    needs opening the FIFO or probing PulseAudio, which is out of scope of ACC-PLAYER-71.
-    """
+    """Report the speaker sink: off after a stop, ready for a FIFO, missing otherwise."""
+    if os.path.exists(os.path.join(os.path.dirname(path), STOP_MARKER_NAME)):
+        return {"state": "off"}
     try:
         mode = os.stat(path).st_mode
     except OSError:
-        return {
-            "ok": False,
-            "reason": f"Speaker FIFO {path} is missing; "
-            "run: jupyterlab_voice_capture start -d",
-        }
+        return {"state": "missing"}
     if not stat.S_ISFIFO(mode):
-        return {
-            "ok": False,
-            "reason": f"Speaker FIFO {path} is not a FIFO; "
-            "run: jupyterlab_voice_capture start -d",
-        }
-    return {"ok": True, "reason": ""}
+        return {"state": "missing"}
+    return {"state": "ready"}
 
 
 def _remove_previous_routes(web_app, prefix):

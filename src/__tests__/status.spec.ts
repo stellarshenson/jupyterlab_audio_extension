@@ -27,26 +27,23 @@ const SETTINGS = {
 
 const ROUTE = 'http://localhost/jupyterlab-voice-capture-extension/player';
 
-const SINK_OK = { ok: true, reason: '' };
-const SINK_BROKEN = {
-  ok: false,
-  reason:
-    'Speaker FIFO /run/voice/speaker.fifo is missing; run: jupyterlab_voice_capture start -d'
-};
+const SINK_READY = { state: 'ready' };
+const SINK_OFF = { state: 'off' };
+const SINK_MISSING = { state: 'missing' };
 
 const IDLE = {
   paused: false,
   stopped: false,
   playing: [],
   queue: [],
-  sink: SINK_OK
+  sink: SINK_READY
 };
 const PLAYING = {
   paused: false,
   stopped: false,
   playing: [{ id: 1, path: '/root/media/a.wav', position_s: 1 }],
   queue: [],
-  sink: SINK_OK
+  sink: SINK_READY
 };
 const PAUSED = { ...PLAYING, paused: true };
 
@@ -91,9 +88,10 @@ function controls(widget: VoiceStatus): IControls {
   };
 }
 
-/** The sink warning dot inside the play control. */
-function dot(play: HTMLButtonElement): HTMLSpanElement {
-  return play.querySelector('.jp-VoiceCapture-dot') as HTMLSpanElement;
+/** The leading audio-system lamp's state, read from data-vc-lamp. */
+function lamp(widget: VoiceStatus): string | undefined {
+  return widget.node.querySelector<HTMLElement>('.jp-VoiceCapture-lamp')
+    ?.dataset.vcLamp;
 }
 
 let request: jest.SpyInstance;
@@ -122,16 +120,29 @@ function create(
 }
 
 describe('VoiceStatus pill', () => {
-  it('ACC-CTRL-66: one pill holds the microphone, play/stop and pause between dividers', async () => {
+  it('ACC-CTRL-66: one pill holds the lamp, the microphone, play/stop and pause between dividers', async () => {
     const { widget } = create();
     await settle();
 
     expect(widget.node.classList.contains('jp-VoiceCapture-status')).toBe(true);
     expect(widget.node.classList.contains('jp-VoiceCapture-pill')).toBe(true);
-    const order = Array.from(widget.node.children).map(
-      el => (el as HTMLElement).dataset.vcControl ?? 'divider'
+    const order = Array.from(widget.node.children).map(el =>
+      el.classList.contains('jp-VoiceCapture-lamp')
+        ? 'lamp'
+        : ((el as HTMLElement).dataset.vcControl ?? 'divider')
     );
-    expect(order).toEqual(['mic', 'divider', 'play', 'divider', 'pause']);
+    expect(order).toEqual([
+      'lamp',
+      'divider',
+      'mic',
+      'divider',
+      'play',
+      'divider',
+      'pause'
+    ]);
+    const lampElement = widget.node.querySelector('.jp-VoiceCapture-lamp');
+    expect(lampElement).not.toBeNull();
+    expect(lampElement!.getAttribute('aria-hidden')).toBe('true');
     const { mic, play, pause } = controls(widget);
     expect(mic.querySelector('svg')).not.toBeNull();
     expect(play.querySelector('svg')).not.toBeNull();
@@ -286,44 +297,40 @@ describe('VoiceStatus player controls', () => {
     expect(play.disabled).toBe(true);
     expect(pause.disabled).toBe(true);
     expect(play.dataset.vcFace).toBe('play');
-    expect(dot(play).hidden).toBe(true);
+    expect(lamp(widget)).toBe('ready');
 
     widget.dispose();
   });
 
-  it('ACC-CTRL-72/77: a broken sink blinks an amber dot and a plain tooltip', async () => {
+  it('ACC-CTRL-72/77: a missing sink blinks the amber lamp and a plain tooltip', async () => {
     request.mockImplementation(async () =>
-      response({ ...IDLE, sink: SINK_BROKEN })
+      response({ ...IDLE, sink: SINK_MISSING })
     );
     const widget = create().widget;
     await settle();
-    const { root, play, pause } = controls(widget);
-    const warning = dot(play);
+    const { root, mic, play, pause } = controls(widget);
 
-    expect(warning).not.toBeNull();
-    expect(warning.getAttribute('aria-hidden')).toBe('true');
-    expect(warning.hidden).toBe(false);
-    expect(warning.classList.contains('jp-mod-blink')).toBe(true);
+    expect(lamp(widget)).toBe('fault');
+    expect(mic.disabled).toBe(false);
     expect(play.classList.contains('jp-mod-error')).toBe(false);
     expect(pause.classList.contains('jp-mod-error')).toBe(false);
     expect(root.classList.contains('jp-mod-sink-error')).toBe(false);
-    expect(pause.classList.contains('jp-mod-blink')).toBe(false);
     expect(play.title).toBe('Play - Audio output is unavailable');
     expect(play.getAttribute('aria-label')).toBe(
       'Play - Audio output is unavailable'
     );
-    expect(play.title).not.toMatch(
-      /fifo|\/|start -d|jupyterlab_voice_capture/i
-    );
+    for (const tip of [play.title, play.getAttribute('aria-label') ?? '']) {
+      expect(tip).not.toMatch(/fifo|\/|start -d|jupyterlab_voice_capture/i);
+    }
     expect(play.dataset.vcFace).toBe('play');
     expect(root.dataset.vcPlayer).toBe('idle');
 
     widget.dispose();
   });
 
-  it('ACC-CTRL-72: the controls keep reporting the player state while the sink is broken', async () => {
+  it('ACC-CTRL-72: the controls keep reporting the player state while the sink is missing', async () => {
     request.mockImplementation(async () =>
-      response({ ...PLAYING, sink: SINK_BROKEN })
+      response({ ...PLAYING, sink: SINK_MISSING })
     );
     const playing = create().widget;
     await settle();
@@ -332,11 +339,11 @@ describe('VoiceStatus player controls', () => {
     expect(play.disabled).toBe(false);
     expect(pause.disabled).toBe(false);
     expect(play.title).toBe('Stop - Audio output is unavailable');
-    expect(dot(play).hidden).toBe(false);
+    expect(lamp(playing)).toBe('fault');
     playing.dispose();
 
     request.mockImplementation(async () =>
-      response({ ...PAUSED, sink: SINK_BROKEN })
+      response({ ...PAUSED, sink: SINK_MISSING })
     );
     const paused = create().widget;
     await settle();
@@ -348,66 +355,137 @@ describe('VoiceStatus player controls', () => {
     paused.dispose();
   });
 
-  it('ACC-CTRL-72: the dot and the plain tooltip clear when the sink recovers', async () => {
+  it('ACC-CTRL-72: the fault lamp and the plain tooltip clear when the sink recovers', async () => {
     request.mockImplementation(async () =>
-      response({ ...PLAYING, sink: SINK_BROKEN })
+      response({ ...PLAYING, sink: SINK_MISSING })
     );
     const widget = create().widget;
     await settle();
     const { play } = controls(widget);
-    expect(dot(play).hidden).toBe(false);
+    expect(lamp(widget)).toBe('fault');
 
     request.mockImplementation(async () => response(IDLE));
     play.click(); // stop
     await settle();
-    expect(dot(play).hidden).toBe(true);
-    expect(dot(play).classList.contains('jp-mod-blink')).toBe(false);
+    expect(lamp(widget)).toBe('ready');
     expect(play.title).toBe('Play');
 
     widget.dispose();
   });
 });
 
+describe('VoiceStatus lamp', () => {
+  it('ACC-CTRL-78: the ready lamp is filled and both controls are disabled while the player is idle', async () => {
+    const { widget } = create();
+    await settle();
+    const { play, pause } = controls(widget);
+
+    expect(lamp(widget)).toBe('ready');
+    expect(play.disabled).toBe(true);
+    expect(pause.disabled).toBe(true);
+
+    widget.dispose();
+  });
+
+  it('ACC-CTRL-78: a file playing turns the lamp active and a pause returns it to ready', async () => {
+    request.mockImplementation(async () => response(PLAYING));
+    const widget = create().widget;
+    await settle();
+    const { play, pause } = controls(widget);
+    expect(lamp(widget)).toBe('active');
+    expect(play.disabled).toBe(false);
+
+    request.mockImplementation(async () => response(PAUSED));
+    pause.click();
+    await settle();
+    expect(lamp(widget)).toBe('ready');
+    expect(play.disabled).toBe(false);
+    expect(pause.disabled).toBe(true);
+
+    widget.dispose();
+  });
+
+  it('ACC-CTRL-78: a streaming microphone turns the lamp active and connecting does not', async () => {
+    const { widget, model } = create();
+    await settle();
+    expect(lamp(widget)).toBe('ready');
+
+    model.state = 'connecting';
+    model.stateChanged.emit('connecting');
+    expect(lamp(widget)).toBe('ready');
+
+    model.state = 'streaming';
+    model.stateChanged.emit('streaming');
+    expect(lamp(widget)).toBe('active');
+
+    // A capture error does not change the lamp.
+    model.state = 'error';
+    model.stateChanged.emit('error');
+    expect(lamp(widget)).toBe('ready');
+
+    widget.dispose();
+  });
+
+  it('ACC-CTRL-79: a deliberate shutdown is the hollow ring with both controls disabled and the plain shut-down tooltip', async () => {
+    request.mockImplementation(async () =>
+      response({ ...PLAYING, sink: SINK_OFF })
+    );
+    const widget = create().widget;
+    await settle();
+    const { mic, play, pause } = controls(widget);
+
+    expect(lamp(widget)).toBe('off');
+    expect(play.disabled).toBe(true);
+    expect(pause.disabled).toBe(true);
+    expect(mic.disabled).toBe(false);
+    expect(play.dataset.vcFace).toBe('stop');
+    expect(play.title).toBe('Stop - Audio output is shut down');
+    expect(play.getAttribute('aria-label')).toBe(
+      'Stop - Audio output is shut down'
+    );
+    for (const tip of [play.title, play.getAttribute('aria-label') ?? '']) {
+      expect(tip).not.toMatch(/fifo|\/|start -d|jupyterlab_voice_capture/i);
+    }
+
+    widget.dispose();
+  });
+});
+
 describe('VoiceStatus blink limit', () => {
-  it('ACC-CTRL-73: the dot blinks 30 s, disappears, and a later break blinks again', async () => {
+  it('ACC-CTRL-73: the lamp blinks 30 s, settles to the off ring, and a later break blinks again', async () => {
     jest.useFakeTimers();
-    let state: object = { ...PLAYING, sink: SINK_BROKEN };
+    let state: object = { ...PLAYING, sink: SINK_MISSING };
     request.mockImplementation(async () => response(state));
 
     const widget = create().widget;
     await jest.advanceTimersByTimeAsync(0);
     const { play, pause } = controls(widget);
-    const warning = dot(play);
-    expect(warning.hidden).toBe(false);
-    expect(warning.classList.contains('jp-mod-blink')).toBe(true);
+    expect(lamp(widget)).toBe('fault');
     expect(play.disabled).toBe(false);
     expect(pause.disabled).toBe(false);
 
     await jest.advanceTimersByTimeAsync(29999);
-    expect(warning.hidden).toBe(false);
-    expect(warning.classList.contains('jp-mod-blink')).toBe(true);
+    expect(lamp(widget)).toBe('fault');
     expect(play.disabled).toBe(false);
     expect(pause.disabled).toBe(false);
 
     await jest.advanceTimersByTimeAsync(1);
-    expect(warning.hidden).toBe(true);
-    expect(warning.classList.contains('jp-mod-blink')).toBe(false);
+    expect(lamp(widget)).toBe('off');
     expect(play.disabled).toBe(true);
     expect(pause.disabled).toBe(true);
     expect(play.title).toBe('Stop - Audio output is unavailable');
 
-    // A healthy status ends the episode.
-    state = { ...PLAYING };
+    // A healthy status ends the episode; a file playing makes the lamp active.
+    state = { ...PLAYING, sink: SINK_READY };
     await jest.advanceTimersByTimeAsync(2000);
-    expect(warning.hidden).toBe(true);
+    expect(lamp(widget)).toBe('active');
     expect(play.disabled).toBe(false);
     expect(play.title).toBe('Stop');
 
     // A break after the recovery starts a new blink.
-    state = { ...PLAYING, sink: SINK_BROKEN };
+    state = { ...PLAYING, sink: SINK_MISSING };
     await jest.advanceTimersByTimeAsync(2000);
-    expect(warning.hidden).toBe(false);
-    expect(warning.classList.contains('jp-mod-blink')).toBe(true);
+    expect(lamp(widget)).toBe('fault');
     expect(play.disabled).toBe(false);
 
     widget.dispose();

@@ -9,9 +9,10 @@ import { Widget } from '@lumino/widgets';
 import { VoiceCapture, VoiceCaptureState } from './voice-capture';
 
 const STATUS_POLL_MS = 2000;
-// The broken-sink episode blinks for this long, then the dot disappears.
+// The missing-sink episode blinks for this long, then the lamp settles to the off ring.
 const BLINK_MS = 30000;
 const SINK_UNAVAILABLE = 'Audio output is unavailable';
+const SINK_SHUT_DOWN = 'Audio output is shut down';
 
 const MIC_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
   <path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3z"/>
@@ -50,11 +51,13 @@ export const stopIcon = new LabIcon({
   svgstr: STOP_SVG
 });
 
+type SinkState = 'ready' | 'off' | 'missing';
+
 /** The part of the player route's state the controls read. */
 interface IPlayerState {
   paused: boolean;
   playing: unknown[];
-  sink: { ok: boolean; reason: string };
+  sink: { state: SinkState };
 }
 
 type PlayerMode = 'playing' | 'paused' | 'idle';
@@ -82,13 +85,14 @@ const PLAY_LABELS: Record<PlayerMode, string> = {
 const PAUSE_LABEL = 'Pause';
 
 /**
- * Status-bar pill: the microphone toggle, a play/stop control and a pause control between
- * hairline dividers. The microphone reflects exactly one of idle / connecting / streaming /
- * error (A4), animates per state and carries the state word and guide in its tooltip. The
- * player state is polled every 2 s; a click applies the response at once so the faces
- * change without waiting. While the sink is broken an amber dot on the play control blinks
- * for 30 s, then disappears and both controls read disabled with the plain message left in
- * the play tooltip.
+ * Status-bar pill: an audio-system lamp, the microphone toggle, a play/stop control and a
+ * pause control between hairline dividers. The lamp is the leading child and reports the
+ * speaker sink: ready, off, active or fault. The microphone reflects exactly one of idle /
+ * connecting / streaming / error (A4), animates per state and carries the state word and
+ * guide in its tooltip. The player state is polled every 2 s; a click applies the response
+ * at once so the faces change without waiting. A missing sink blinks the lamp amber for
+ * 30 s, then settles it to the off ring with both controls disabled and the plain message
+ * left in the play tooltip; a deliberate shutdown shows the ring at once.
  */
 export class VoiceStatus extends Widget {
   constructor(model: VoiceCapture, settings: ServerConnection.ISettings) {
@@ -98,14 +102,14 @@ export class VoiceStatus extends Widget {
     this.addClass('jp-VoiceCapture-status');
     this.addClass('jp-VoiceCapture-pill');
 
+    this._lamp = document.createElement('span');
+    this._lamp.className = 'jp-VoiceCapture-lamp';
+    this._lamp.setAttribute('aria-hidden', 'true');
     this._mic = this._createMic();
     this._play = this._createControl('play');
     this._pause = this._createControl('pause');
-    this._dot = document.createElement('span');
-    this._dot.className = 'jp-VoiceCapture-dot';
-    this._dot.setAttribute('aria-hidden', 'true');
-    this._dot.hidden = true;
-    this._play.appendChild(this._dot);
+    this.node.appendChild(this._lamp);
+    this.node.appendChild(this._divider());
     this.node.appendChild(this._mic);
     this.node.appendChild(this._divider());
     this.node.appendChild(this._play);
@@ -187,6 +191,7 @@ export class VoiceStatus extends Widget {
     this.node.title = tooltip;
     this._mic.title = tooltip;
     this._mic.setAttribute('aria-label', tooltip);
+    this._paintLamp();
   }
 
   private _render(mode: PlayerMode, sink?: IPlayerState['sink']): void {
@@ -197,30 +202,56 @@ export class VoiceStatus extends Widget {
     (face === 'stop' ? stopIcon : playIcon).element({ container: icon });
     this._play.dataset.vcFace = face;
 
-    const broken = sink?.ok === false;
-    if (!broken) {
+    if (sink) {
+      this._sink = sink.state;
+    }
+    if (this._sink !== 'missing') {
       this._stopBlink();
     } else if (!this._blinkDone && this._blinkTimer === null) {
-      this._dot.hidden = false;
-      this._dot.classList.add('jp-mod-blink');
       this._blinkTimer = window.setTimeout(() => {
         this._blinkTimer = null;
         this._blinkDone = true;
-        this._dot.hidden = true;
-        this._dot.classList.remove('jp-mod-blink');
-        this._play.disabled = true;
-        this._pause.disabled = true;
+        this._paintLamp();
+        this._applyControls();
       }, BLINK_MS);
     }
 
-    const label = broken
-      ? `${PLAY_LABELS[mode]} - ${SINK_UNAVAILABLE}`
+    const reason =
+      this._sink === 'missing'
+        ? SINK_UNAVAILABLE
+        : this._sink === 'off'
+          ? SINK_SHUT_DOWN
+          : '';
+    const label = reason
+      ? `${PLAY_LABELS[mode]} - ${reason}`
       : PLAY_LABELS[mode];
     this._play.title = label;
     this._play.setAttribute('aria-label', label);
-    this._play.disabled = this._blinkDone || mode === 'idle';
-    this._pause.disabled = this._blinkDone || mode !== 'playing';
+    this._paintLamp();
+    this._applyControls();
     this.node.dataset.vcPlayer = mode;
+  }
+
+  /** Paints the leading lamp: amber fault during the blink, then the off ring; green while active. */
+  private _paintLamp(): void {
+    let lamp: 'ready' | 'off' | 'active' | 'fault';
+    if (this._sink === 'missing' && !this._blinkDone) {
+      lamp = 'fault';
+    } else if (this._sink === 'missing' || this._sink === 'off') {
+      lamp = 'off';
+    } else if (this._model.state === 'streaming' || this._mode === 'playing') {
+      lamp = 'active';
+    } else {
+      lamp = 'ready';
+    }
+    this._lamp.dataset.vcLamp = lamp;
+  }
+
+  /** A shutdown and a settled fault disable both player controls; otherwise the mode decides. */
+  private _applyControls(): void {
+    const dead = this._sink === 'off' || this._blinkDone;
+    this._play.disabled = dead || this._mode === 'idle';
+    this._pause.disabled = dead || this._mode !== 'playing';
   }
 
   /** Ends the current broken-sink episode; a later break starts a new blink. */
@@ -230,8 +261,6 @@ export class VoiceStatus extends Widget {
       this._blinkTimer = null;
     }
     this._blinkDone = false;
-    this._dot.hidden = true;
-    this._dot.classList.remove('jp-mod-blink');
   }
 
   private async _request(action: string): Promise<void> {
@@ -268,11 +297,12 @@ export class VoiceStatus extends Widget {
 
   private _model: VoiceCapture;
   private _settings: ServerConnection.ISettings;
+  private _lamp: HTMLSpanElement;
   private _mic: HTMLButtonElement;
   private _play: HTMLButtonElement;
   private _pause: HTMLButtonElement;
-  private _dot: HTMLSpanElement;
   private _mode: PlayerMode = 'idle';
+  private _sink: SinkState = 'ready';
   private _timer: number;
   private _blinkTimer: number | null = null;
   private _blinkDone = false;

@@ -2,6 +2,23 @@
 
 <!-- <START NEW CHANGELOG ENTRY> -->
 
+## [1.1.7] - 2026-11-11
+
+### Added
+
+- The player status reports `sink.state` as `ready`, `off` or `missing`; `jupyterlab_voice_capture stop` records the deliberate shutdown beside the FIFO and `start` clears it only after the daemon, source and sink load
+
+### Changed
+
+- The status bar pill leads with one 6 px audio-system lamp before the microphone, replacing the amber dot on the play control: a hollow ring after a deliberate shutdown, filled grey when initialised and idle, muted green while the microphone streams or a file plays, and an amber blink for 30 seconds on a broken sink that then settles to the hollow ring with both player controls disabled
+- The play tooltip keeps `Audio output is unavailable` and adds `Audio output is shut down`, in plain words with no path, FIFO or command
+- README and the player design document describe the lamp and the three-state sink contract
+
+### Fixed
+
+- `stop` records the audio as shut down when the daemon is already down and after a successful kill, while a failed kill records nothing; the foreground start's Ctrl-C records it too
+- The light-theme lamp colours clear 3:1 non-text contrast on the shipped light status bars
+
 ## [1.1.6] - 2026-11-11
 
 ### Changed

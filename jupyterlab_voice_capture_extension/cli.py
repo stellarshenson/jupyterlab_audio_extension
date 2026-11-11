@@ -26,7 +26,7 @@ import stat
 import subprocess
 import sys
 
-from .speaker import SPEAKER_FIFO_NAME
+from .speaker import SPEAKER_FIFO_NAME, STOP_MARKER_NAME
 
 DEFAULT_SINK_PATH = "/run/voice/pulseaudio.fifo"
 SOURCE_NAME = "voicein"
@@ -445,6 +445,20 @@ def cmd_validate(args) -> int:
 # ----------------------------------------------------------------------- start / stop
 
 
+def _stop_marker(sink: str) -> str:
+    """The stop marker file beside the sink FIFO."""
+    return os.path.join(os.path.dirname(sink) or "/", STOP_MARKER_NAME)
+
+
+def _record_shutdown(sink: str) -> None:
+    """Record a deliberate shutdown so the player reports the sink off."""
+    marker = _stop_marker(sink)
+    if os.path.isdir(os.path.dirname(marker)):
+        with open(marker, "w", encoding="utf-8"):
+            pass
+        print("Recorded the audio output as shut down.")
+
+
 def cmd_start(args) -> int:
     sink = args.sink_path
     print(f"Starting PulseAudio voice bridge (source '{SOURCE_NAME}' -> {sink})")
@@ -455,6 +469,10 @@ def cmd_start(args) -> int:
             f"or sink '{SPEAKER_SINK_NAME}' - run: jupyterlab_voice_capture validate"
         )
         return 1
+    try:
+        os.unlink(_stop_marker(sink))
+    except FileNotFoundError:
+        pass  # no stop marker to clear
     if args.detached:
         print(
             "Daemon running (detached). Stop it with: "
@@ -469,17 +487,21 @@ def cmd_start(args) -> int:
             time.sleep(3600)
     except KeyboardInterrupt:
         print("\nStopping...")
-        _stop_daemon()
+        if _stop_daemon() == 0:
+            _record_shutdown(sink)
     return 0
 
 
 def cmd_stop(args) -> int:
     if not _daemon_running():
         print("PulseAudio daemon is not running.")
+        _record_shutdown(args.sink_path)
         return 0
     print("Stopping PulseAudio daemon...")
     rc = _stop_daemon()
     print("Stopped." if rc == 0 else "Stop command returned non-zero.")
+    if rc == 0:
+        _record_shutdown(args.sink_path)
     return rc
 
 
@@ -618,6 +640,9 @@ def main(argv=None) -> int:
         "be undone without start. Prints whether the daemon was running.",
         epilog="examples:\n  jupyterlab_voice_capture stop",
         formatter_class=raw,
+    )
+    p_stop.add_argument(
+        "--sink-path", default=DEFAULT_SINK_PATH, help="FIFO path (default: %(default)s)"
     )
     p_stop.set_defaults(func=cmd_stop)
 

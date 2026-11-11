@@ -4,7 +4,7 @@
     https://jupyterlab.readthedocs.io/en/stable/developer/css.html
 */
 
-/* One status-bar pill: microphone, play/stop and pause between hairline dividers. */
+/* One status-bar pill: lamp, microphone, play/stop and pause between hairline dividers. */
 .jp-VoiceCapture-status.jp-VoiceCapture-pill {
   display: flex;
   align-items: center;
@@ -66,22 +66,41 @@
   cursor: default;
 }
 
-/* The sink warning: an amber dot at the play control's top-right corner (ACC-CTRL-72). */
-[data-vc-control='play'] {
-  position: relative;
-}
-
-.jp-VoiceCapture-dot {
-  position: absolute;
-  top: 1px;
-  right: 1px;
+/* The audio-system lamp leads the pill: a 6 px disc, filled passive grey when ready. */
+.jp-VoiceCapture-lamp {
+  flex: none;
   width: 6px;
   height: 6px;
+  margin: 0 4px;
   border-radius: 50%;
-  background: var(--jp-warn-color0);
+  background: #93a0aa;
 }
 
-.jp-VoiceCapture-dot.jp-mod-blink {
+.jp-VoiceCapture-lamp[data-vc-lamp='off'] {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px #93a0aa;
+}
+
+.jp-VoiceCapture-lamp[data-vc-lamp='active'] {
+  background: #78a884;
+}
+
+[data-jp-theme-light='true'] .jp-VoiceCapture-lamp {
+  background: #4a535b;
+}
+
+[data-jp-theme-light='true'] .jp-VoiceCapture-lamp[data-vc-lamp='off'] {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px #4a535b;
+}
+
+[data-jp-theme-light='true'] .jp-VoiceCapture-lamp[data-vc-lamp='active'] {
+  background: #3a5d42;
+}
+
+/* The fault rule comes last so the amber wins over the theme overrides (ACC-CTRL-72). */
+.jp-VoiceCapture-lamp[data-vc-lamp='fault'] {
+  background: var(--jp-warn-color0);
   animation: vc-blink 1s steps(1, end) infinite;
 }
 

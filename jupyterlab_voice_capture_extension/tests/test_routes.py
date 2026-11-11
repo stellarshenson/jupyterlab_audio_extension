@@ -432,29 +432,36 @@ async def test_player_route_returns_the_empty_state(jp_fetch):
 
 
 async def test_player_status_reports_a_missing_speaker_fifo(jp_fetch, speaker_path):
-    # ACC-PLAYER-71: the status action names the missing voiceout sink and the command that
-    # loads it.
+    # ACC-PLAYER-80: an absent speaker FIFO with no stop marker reads missing.
     response = await _player(jp_fetch, {"action": "status"})
-    sink = json.loads(response.body)["sink"]
-    assert sink["ok"] is False
-    assert speaker_path in sink["reason"]
-    assert "jupyterlab_voice_capture start -d" in sink["reason"]
+    assert json.loads(response.body)["sink"] == {"state": "missing"}
 
 
-async def test_player_status_reports_a_functional_speaker_fifo(jp_fetch, speaker_path):
-    # ACC-PLAYER-71: module-pipe-sink created the FIFO, so the sink is functional.
+async def test_player_status_reports_a_ready_speaker_fifo(jp_fetch, speaker_path):
+    # ACC-PLAYER-80: module-pipe-sink created the FIFO, so the sink is ready.
     os.mkfifo(speaker_path)
     response = await _player(jp_fetch, {"action": "status"})
-    assert json.loads(response.body)["sink"] == {"ok": True, "reason": ""}
+    assert json.loads(response.body)["sink"] == {"state": "ready"}
 
 
-async def test_player_status_names_a_speaker_path_that_is_not_a_fifo(jp_fetch, speaker_path):
+async def test_player_status_reports_a_speaker_path_that_is_not_a_fifo(jp_fetch, speaker_path):
     with open(speaker_path, "wb"):
         pass
     response = await _player(jp_fetch, {"action": "status"})
-    sink = json.loads(response.body)["sink"]
-    assert sink["ok"] is False
-    assert "is not a FIFO" in sink["reason"]
+    assert json.loads(response.body)["sink"] == {"state": "missing"}
+
+
+async def test_player_status_lets_a_stop_marker_win_over_a_stale_speaker_fifo(
+    jp_fetch, speaker_path
+):
+    # ACC-PLAYER-80: a killed daemon can leave its FIFO behind; the stop marker still reads off.
+    from jupyterlab_voice_capture_extension.speaker import STOP_MARKER_NAME
+
+    os.mkfifo(speaker_path)
+    with open(os.path.join(os.path.dirname(speaker_path), STOP_MARKER_NAME), "w"):
+        pass
+    response = await _player(jp_fetch, {"action": "status"})
+    assert json.loads(response.body)["sink"] == {"state": "off"}
 
 
 async def test_player_route_names_an_unknown_action_and_changes_nothing(jp_fetch):

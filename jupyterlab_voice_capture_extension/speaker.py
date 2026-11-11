@@ -17,6 +17,10 @@ import threading
 # File name of the speaker FIFO, in the directory of c.VoiceCapture.sink_path.
 SPEAKER_FIFO_NAME = "speaker.fifo"
 
+# Written by the stop command beside the speaker FIFO; the player reports it as a
+# deliberate shutdown even when a killed daemon left its FIFO behind.
+STOP_MARKER_NAME = ".stopped"
+
 # Bytes in one s16le stereo sample frame.
 FRAME_BYTES = 4
 

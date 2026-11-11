@@ -1,9 +1,11 @@
 import json
 import os
+import time
 
 import pytest
 
 import jupyterlab_voice_capture_extension.cli as cli
+from jupyterlab_voice_capture_extension.speaker import STOP_MARKER_NAME
 
 
 def test_install_dry_run_uses_apt_never_conda(capsys, monkeypatch):
@@ -316,6 +318,82 @@ def test_start_exits_1_when_voiceout_did_not_load(tmp_path, capsys, monkeypatch)
 
     assert rc == 1
     assert "voiceout" in capsys.readouterr().out
+
+
+def test_stop_records_the_stop_marker_beside_the_sink(tmp_path, capsys, monkeypatch):
+    # ACC-PLAYER-80: a deliberate shutdown is recorded so the player reports the sink off.
+    sink = str(tmp_path / "pulseaudio.fifo")
+    monkeypatch.setattr(cli, "_daemon_running", lambda: True)
+    monkeypatch.setattr(cli, "_stop_daemon", lambda: 0)
+
+    assert cli.main(["stop", "--sink-path", sink]) == 0
+
+    assert (tmp_path / STOP_MARKER_NAME).is_file()
+    assert "shut down" in capsys.readouterr().out
+
+
+def test_stop_records_the_stop_marker_when_the_daemon_is_already_down(
+    tmp_path, capsys, monkeypatch
+):
+    # A daemon already down plus a stale FIFO must not read ready after a deliberate stop.
+    sink = str(tmp_path / "pulseaudio.fifo")
+    monkeypatch.setattr(cli, "_daemon_running", lambda: False)
+
+    assert cli.main(["stop", "--sink-path", sink]) == 0
+
+    assert (tmp_path / STOP_MARKER_NAME).is_file()
+    assert "shut down" in capsys.readouterr().out
+
+
+def test_stop_writes_no_marker_when_the_kill_fails(tmp_path, capsys, monkeypatch):
+    # A failed kill must not claim the audio is shut down.
+    sink = str(tmp_path / "pulseaudio.fifo")
+    monkeypatch.setattr(cli, "_daemon_running", lambda: True)
+    monkeypatch.setattr(cli, "_stop_daemon", lambda: 1)
+
+    assert cli.main(["stop", "--sink-path", sink]) == 1
+
+    assert not (tmp_path / STOP_MARKER_NAME).exists()
+    assert "shut down" not in capsys.readouterr().out
+
+
+def test_interrupted_start_records_the_stop_marker(tmp_path, capsys, monkeypatch):
+    # Ctrl-C stops the daemon and records the deliberate shutdown.
+    sink = str(tmp_path / "pulseaudio.fifo")
+    monkeypatch.setattr(cli, "_start_pulse_and_source", lambda sink, dry: None)
+    monkeypatch.setattr(cli, "_daemon_running", lambda: True)
+    monkeypatch.setattr(cli, "_source_loaded", lambda: True)
+    monkeypatch.setattr(cli, "_sink_loaded", lambda: True)
+    monkeypatch.setattr(cli, "_stop_daemon", lambda: 0)
+
+    def interrupted(_seconds):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(time, "sleep", interrupted)
+
+    assert cli.main(["start", "--sink-path", sink]) == 0
+
+    assert (tmp_path / STOP_MARKER_NAME).is_file()
+    assert "shut down" in capsys.readouterr().out
+
+
+def test_start_clears_the_stop_marker_only_after_every_component_loaded(tmp_path, monkeypatch):
+    # ACC-PLAYER-80: a failed start leaves the marker, so the sink still reads off.
+    sink = str(tmp_path / "pulseaudio.fifo")
+    marker = tmp_path / STOP_MARKER_NAME
+    monkeypatch.setattr(cli, "_start_pulse_and_source", lambda sink, dry: None)
+    monkeypatch.setattr(cli, "_daemon_running", lambda: True)
+    monkeypatch.setattr(cli, "_source_loaded", lambda: True)
+    monkeypatch.setattr(cli, "_sink_loaded", lambda: True)
+
+    marker.write_text("")
+    assert cli.main(["start", "-d", "--sink-path", sink]) == 0
+    assert not marker.exists()
+
+    marker.write_text("")
+    monkeypatch.setattr(cli, "_sink_loaded", lambda: False)
+    assert cli.main(["start", "-d", "--sink-path", sink]) == 1
+    assert marker.exists()
 
 
 def test_validate_reports_the_speaker_rows(capsys, monkeypatch):

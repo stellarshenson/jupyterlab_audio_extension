@@ -1,6 +1,6 @@
 import { expect, galata, test } from '@jupyterlab/galata';
 import type { BrowserContext, Page } from '@playwright/test';
-import { ChildProcess, spawn } from 'child_process';
+import { ChildProcess, spawn, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -831,7 +831,7 @@ test.describe('player', () => {
     await expect(mic).toBeVisible();
     await expect(play).toBeVisible();
     await expect(pause).toBeVisible();
-    await expect(pill.locator('.jp-VoiceCapture-divider')).toHaveCount(2);
+    await expect(pill.locator('.jp-VoiceCapture-divider')).toHaveCount(3);
 
     // The three segments sit inside the one pill, in a single row.
     const pillBox = (await pill.boundingBox())!;
@@ -887,16 +887,16 @@ test.describe('player', () => {
     expect(colours.streaming).toBe(colours.enabled);
   });
 
-  test('ACC-PLAYER-71/ACC-CTRL-72/73/77: a missing speaker sink blinks an amber dot with a plain tooltip', async ({
+  test('ACC-PLAYER-71/ACC-CTRL-72/73/77: a missing speaker sink blinks the lamp with a plain tooltip', async ({
     page,
     baseURL
   }) => {
     await openLab(page, `${baseURL}/lab`);
     const pill = page.locator(STATUS);
     const play = pill.locator('[data-vc-control="play"]');
-    const warning = play.locator('.jp-VoiceCapture-dot');
-    await expect(warning).toBeVisible();
-    await expect(warning).toHaveClass(/jp-mod-blink/);
+    const lamp = pill.locator('.jp-VoiceCapture-lamp');
+    await expect(lamp).toHaveAttribute('data-vc-lamp', 'fault');
+    await expect(lamp).toHaveAttribute('aria-hidden', 'true');
     await expect(play).not.toHaveClass(/jp-mod-error/);
     await expect(play).toHaveAttribute('data-vc-face', 'play');
     await expect(play).toBeDisabled();
@@ -904,9 +904,9 @@ test.describe('player', () => {
       'title',
       'Play - Audio output is unavailable'
     );
-    expect(
-      await warning.evaluate(el => getComputedStyle(el).animationName)
-    ).toBe('vc-blink');
+    expect(await lamp.evaluate(el => getComputedStyle(el).animationName)).toBe(
+      'vc-blink'
+    );
 
     const warn = await page.evaluate(() => {
       const probe = document.createElement('span');
@@ -917,7 +917,7 @@ test.describe('player', () => {
       return colour;
     });
     expect(
-      await warning.evaluate(el => getComputedStyle(el).backgroundColor)
+      await lamp.evaluate(el => getComputedStyle(el).backgroundColor)
     ).toBe(warn);
 
     // The pill border and tint stay unchanged: no warning class, plain border colour.
@@ -933,6 +933,71 @@ test.describe('player', () => {
     expect(await pill.evaluate(el => getComputedStyle(el).borderTopColor)).toBe(
       border
     );
+  });
+
+  test('ACC-CTRL-78: a speaker FIFO turns the lamp ready', async ({
+    page,
+    baseURL
+  }) => {
+    // A stale FIFO from an interrupted run would already read ready.
+    if (fs.existsSync(SPEAKER_FIFO)) {
+      fs.unlinkSync(SPEAKER_FIFO);
+    }
+    await openLab(page, `${baseURL}/lab`);
+    const pill = page.locator(STATUS);
+    const lamp = pill.locator('.jp-VoiceCapture-lamp');
+    await expect(lamp).toHaveAttribute('data-vc-lamp', 'fault');
+
+    expect(spawnSync('mkfifo', [SPEAKER_FIFO]).status).toBe(0);
+    try {
+      await expect(lamp).toHaveAttribute('data-vc-lamp', 'ready', {
+        timeout: 10000
+      });
+      await expect(pill.locator('[data-vc-control="play"]')).toBeDisabled();
+      await expect(pill.locator('[data-vc-control="pause"]')).toBeDisabled();
+    } finally {
+      fs.unlinkSync(SPEAKER_FIFO);
+    }
+  });
+
+  test('ACC-CTRL-79: a stopped marker shows the hollow off lamp with both controls disabled', async ({
+    page,
+    baseURL
+  }) => {
+    if (fs.existsSync(SPEAKER_FIFO)) {
+      fs.unlinkSync(SPEAKER_FIFO);
+    }
+    await openLab(page, `${baseURL}/lab`);
+    const pill = page.locator(STATUS);
+    const lamp = pill.locator('.jp-VoiceCapture-lamp');
+    const play = pill.locator('[data-vc-control="play"]');
+    const pause = pill.locator('[data-vc-control="pause"]');
+    await expect(lamp).toHaveAttribute('data-vc-lamp', 'fault');
+
+    const marker = path.join(path.dirname(SINK), '.stopped');
+    fs.writeFileSync(marker, '');
+    try {
+      await expect(lamp).toHaveAttribute('data-vc-lamp', 'off', {
+        timeout: 10000
+      });
+      expect(
+        await lamp.evaluate(el => getComputedStyle(el).backgroundColor)
+      ).toBe('rgba(0, 0, 0, 0)');
+      expect(
+        await lamp.evaluate(el => getComputedStyle(el).boxShadow)
+      ).toContain('inset');
+      expect(
+        await lamp.evaluate(el => getComputedStyle(el).animationName)
+      ).toBe('none');
+      await expect(play).toBeDisabled();
+      await expect(pause).toBeDisabled();
+      await expect(play).toHaveAttribute(
+        'title',
+        'Play - Audio output is shut down'
+      );
+    } finally {
+      fs.unlinkSync(marker);
+    }
   });
 });
 
