@@ -1,0 +1,4 @@
+- 2026-11-11T23:44:10Z @kj acc-crit-voice-capture.md 10e4d071 sha256:de758dceb5af3df5838b8de257533a7adc2541245e8b7e254e8caa43c00944d7: git mv the tracker file to docs/acc-crit-audio.md for the extension rename; pm-tools has no file-rename command
+- 2026-11-11T23:44:10Z @kj defects-voice-capture.md 2a1564bd sha256:bfa5cccd420f3d7cf26d60933fc673ba47cc55e23ab8de1683418f944100f093: git mv the tracker file to docs/defects-audio.md for the extension rename; pm-tools has no file-rename command
+- 2026-11-11T23:48:12Z @kj acc-crit-audio.md 58acbd17 sha256:20665ccebcf410102c025a4c534dae6881ebe9458cc90f4f626b54d99f5335ee: the tracker H1 and preamble name the renamed project; pm-tools has no command for the document title or preamble
+- 2026-11-11T23:48:12Z @kj defects-audio.md 731198e2 sha256:dbfc7ea04eb8755bcfb291df1c2b15c292d6204c9ee10035b69e5f5538ae374d: the tracker H1 and preamble name the renamed project; pm-tools has no command for the document title or preamble
