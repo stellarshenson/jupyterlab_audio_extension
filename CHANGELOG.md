@@ -2,6 +2,13 @@
 
 <!-- <START NEW CHANGELOG ENTRY> -->
 
+## [1.0.1] - 2026-11-12
+
+### Fixed
+
+- The shipped agent skill claimed the Commands Executor default already lists the `audio:*` ids; it lists the retired `voice-capture:*` ids, so the skill now says to add the new ids when a call exits 4
+- The enable guide checks the server extension with `grep jupyterlab_audio_extension` and describes the streaming icon as the active-lamp green
+
 ## [1.0.0] - 2026-11-12
 
 ### Added
