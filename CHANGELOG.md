@@ -2,6 +2,12 @@
 
 <!-- <START NEW CHANGELOG ENTRY> -->
 
+## [1.0.2] - 2026-11-12
+
+### Changed
+
+- Maintenance re-release of 1.0.1 with no functional changes (version bump only)
+
 ## [1.0.1] - 2026-11-12
 
 ### Fixed
