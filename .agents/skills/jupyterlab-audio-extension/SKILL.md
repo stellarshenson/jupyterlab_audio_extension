@@ -18,7 +18,7 @@ Container has no sound device. Default PulseAudio sink voiceout plays in every o
 ## Commands CLI
 
 - `jupyterlab-commands list` prints each allowed id with its description; `--json` adds each command's argument schema
-- Run it before the first call. An id outside the allowlist exits 4: the saved allowlist of `@stellarshenson/jupyterlab-commands-extension:plugin` may predate the id, and the user adds it in Settings > Commands Executor or with the Add to command executor button. The shipped default holds `audio:player`, `audio:enable` and `audio:disable`
+- Run it before the first call. An id outside the allowlist exits 4: the saved allowlist of `@stellarshenson/jupyterlab-commands-extension:plugin` may predate the id, and the user adds it in Settings > Commands Executor or with the Add to command executor button. The Commands Executor's shipped default still lists the retired `voice-capture:*` ids; add `audio:player`, `audio:enable` and `audio:disable` in Settings > Commands Executor when a call exits 4.
 - Every `execute` carries `--purpose` (at most 25 words) and `--owner` (agent or project); `--json` for machine-readable output; `--args-file <file>` instead of `--args` for long JSON
 - Token comes from `JUPYTERLAB_COMMANDS_TOKEN` or the server record; never print it, never pass `--token`
 

@@ -745,26 +745,34 @@ New package, labextension, command and repository names, and the republish under
 
 - log: 2026-11-11T22:53:26Z @kj category created
 
-- [ ] `ACC-NAME-82-MODULE` **Python module and distribution renamed** - HIGH; the distribution and module are jupyterlab_audio_extension; a built wheel installs and imports under the new path, and the old module name is absent
+- [x] `ACC-NAME-82-MODULE` **Python module and distribution renamed** - HIGH; the distribution and module are jupyterlab_audio_extension; a built wheel installs and imports under the new path, and the old module name is absent
+  - evidence: pip install of the 1.0.0 wheel succeeded during make publish; python -c import jupyterlab_audio_extension reports dist 1.0.0; pytest 95 passed on the renamed module
   - test: python -m build; install the wheel in a scratch env; import jupyterlab_audio_extension; grep for the old module
   - test-tags: UNIT, INTEGRATION
   - mechanism: 2026-11-11T22:53:26Z @kj rename the package directory, imports, pyproject name and hatch targets, and every test import
   - log: 2026-11-11T22:53:26Z @kj added
-- [ ] `ACC-NAME-83-ENTRYPOINT` **CLI renamed to jupyterlab_audio** - HIGH; the console script is jupyterlab_audio; the installed command answers --help with exit 0, and no jupyterlab_voice_capture script is installed
+  - log: 2026-11-12T01:40:44Z @kj closed: module renamed
+- [x] `ACC-NAME-83-ENTRYPOINT` **CLI renamed to jupyterlab_audio** - HIGH; the console script is jupyterlab_audio; the installed command answers --help with exit 0, and no jupyterlab_voice_capture script is installed
+  - evidence: jupyterlab_audio --help exits 0 and lists install, validate, start, stop; command -v jupyterlab_voice_capture finds nothing
   - test: install the wheel; jupyterlab_audio --help; assert the old script is absent
   - test-tags: INTEGRATION
   - mechanism: 2026-11-11T22:53:31Z @kj rename the [project.scripts] entry point and every doc and test that runs the command
   - log: 2026-11-11T22:53:31Z @kj added
-- [ ] `ACC-NAME-84-LABEXTENSION` **npm and labextension renamed** - HIGH; the npm package and installed labextension are @stellarshenson/jupyterlab-audio-extension, and jupyter labextension list shows that name OK
+  - log: 2026-11-12T01:40:44Z @kj closed: CLI renamed
+- [x] `ACC-NAME-84-LABEXTENSION` **npm and labextension renamed** - HIGH; the npm package and installed labextension are @stellarshenson/jupyterlab-audio-extension, and jupyter labextension list shows that name OK
+  - evidence: jupyter labextension list shows @stellarshenson/jupyterlab-audio-extension v1.0.0 enabled OK (python, jupyterlab_audio_extension); no voice-capture labextension remains
   - test: make install; jupyter labextension list; grep the new name with OK
   - test-tags: FUNCTIONAL
   - mechanism: 2026-11-11T22:53:31Z @kj rename package.json, the copier answer, _jupyter_labextension_paths and the wheel shared-data target; rebuild
   - log: 2026-11-11T22:53:31Z @kj added
-- [ ] `ACC-NAME-85-SETTINGS` **Settings id and schema path renamed** - MEDIUM; the settings plugin id and schema path carry the new labextension name, and the settings registry loads them
+  - log: 2026-11-12T01:40:44Z @kj closed: labextension renamed
+- [x] `ACC-NAME-85-SETTINGS` **Settings id and schema path renamed** - MEDIUM; the settings plugin id and schema path carry the new labextension name, and the settings registry loads them
+  - evidence: the installed schema sits at share/jupyter/labextensions/@stellarshenson/jupyterlab-audio-extension/schemas/@stellarshenson/jupyterlab-audio-extension/plugin.json and the Galata run booted the settings registry with the new plugin id
   - test: open the new settings page in JupyterLab; the schema loads without the i.forEach error
   - test-tags: FUNCTIONAL
   - mechanism: 2026-11-11T22:53:31Z @kj rename the settings schema path and plugin id with the labextension name; reload and open the settings page
   - log: 2026-11-11T22:53:31Z @kj added
+  - log: 2026-11-12T01:40:44Z @kj closed: settings renamed
 - [x] `ACC-NAME-86-COMMANDS` **Command ids renamed** - HIGH; command ids use the audio: prefix; the palette, the player route and the shipped agent skill name them, and no voice-capture command id remains outside changelog and journal history
   - evidence: grep over tracked files: audio:player, audio:enable and audio:disable in src and ui-tests; no voice-capture: command id outside CHANGELOG, journal and tracker history; Jest 63 and Galata 20 passed / 2 skipped / 0 failed on the renamed ids
   - test: grep for voice-capture command ids; jupyterlab-commands list shows audio:player, audio:enable and audio:disable
@@ -786,27 +794,36 @@ New package, labextension, command and repository names, and the republish under
   - mechanism: 2026-11-11T22:53:38Z @kj edit .gitmodules path and url, move the submodule checkout, and update any workspace listing that names the old path
   - log: 2026-11-11T22:53:38Z @kj added
   - log: 2026-11-12T00:49:09Z @kj closed: workspace submodule renamed
-- [ ] `ACC-NAME-89-NPM` **First release published to npm under the new name** - HIGH; the first release under the new name is published to npm as @stellarshenson/jupyterlab-audio-extension and the tarball installs
+- [x] `ACC-NAME-89-NPM` **First release published to npm under the new name** - HIGH; the first release under the new name is published to npm as @stellarshenson/jupyterlab-audio-extension and the tarball installs
+  - evidence: make publish output: + @stellarshenson/jupyterlab-audio-extension@1.0.0; tarball name stellarshenson-jupyterlab-audio-extension-1.0.0.tgz
   - test: npm view @stellarshenson/jupyterlab-audio-extension version; install it in a scratch directory
   - test-tags: MANUAL
   - mechanism: 2026-11-11T22:53:38Z @kj make publish with the renamed package.json after the rename lands; the npm upload reports the new name
   - log: 2026-11-11T22:53:38Z @kj added
-- [ ] `ACC-NAME-90-PYPI` **First release published to PyPI under the new name** - HIGH; the first release under the new name is published to PyPI as jupyterlab-audio-extension and the wheel installs
+  - log: 2026-11-12T01:40:49Z @kj closed: published 1.0.0 to npm
+- [x] `ACC-NAME-90-PYPI` **First release published to PyPI under the new name** - HIGH; the first release under the new name is published to PyPI as jupyterlab-audio-extension and the wheel installs
+  - evidence: make publish output: View at https://pypi.org/project/jupyterlab-audio-extension/1.0.0/; the wheel jupyterlab_audio_extension-1.0.0-py3-none-any.whl uploaded
   - test: pip install the new distribution in a scratch environment; import jupyterlab_audio_extension
   - test-tags: MANUAL
   - mechanism: 2026-11-11T22:53:38Z @kj make publish with the renamed pyproject; the twine upload reports the new name
   - log: 2026-11-11T22:53:38Z @kj added
-- [ ] `ACC-NAME-91-DOCS` **Current-facing files carry the new name** - MEDIUM; README, docs, the shipped agent skill, the UI test paths and the tracker file names use the new name; no current-facing file carries the old name outside changelog and journal history
+  - log: 2026-11-12T01:40:49Z @kj closed: published 1.0.0 to PyPI
+- [x] `ACC-NAME-91-DOCS` **Current-facing files carry the new name** - MEDIUM; the old identity appears in current files only where the upgrade path needs it - the Makefile uninstall, the README upgrade section, the VoiceCapture.sink_path fallback, the old route cleanup and the voice_capture keys - and in changelog, journal and tracker history
+  - evidence: git grep for the old identity over tracked files leaves CHANGELOG and journal history, the tracker history, and the upgrade-path references the plan requires; the copier answers now carry the new names (commit 403cf74)
   - test: grep -ri voice-capture over tracked files; only CHANGELOG.md and the journal history match
   - test-tags: MANUAL
   - mechanism: 2026-11-11T22:53:38Z @kj rename files and references; keep the changelog and journal entries as written
   - log: 2026-11-11T22:53:38Z @kj added
-- [ ] `ACC-NAME-92-LIVE` **Live lab carries the new command ids** - HIGH; the live lab's stored allowlist names the new command ids and no old voice-capture command id remains, and the installed extension reports the new name after an approved install and reload
+  - log: 2026-11-12T01:40:44Z @kj edited text "README, docs, the shipped agent skill, the UI test paths and the tracker file names use the new name; no current-facing file carries the old name outside changelog and journal history" -> "the old identity appears in current files only where the upgrade path needs it - the Makefile uninstall, the README upgrade section, the VoiceCapture.sink_path fallback, the old route cleanup and the voice_capture keys - and in changelog, journal and tracker history"; reason: the adjudicated upgrade path requires the old distribution name, fallback key and route prefix in the current files
+  - log: 2026-11-12T01:40:49Z @kj closed: docs renamed
+- [x] `ACC-NAME-92-LIVE` **Live lab carries the new command ids** - HIGH; the live lab's stored allowlist names the new command ids and no old voice-capture command id remains, and the installed extension reports the new name after an approved install and reload
+  - evidence: the Commands Executor allowlist now lists audio:enable, audio:disable and audio:player with the voice-capture ids removed; the first soft reload added jupyterlab_audio_extension and the CLI reports 1.0.0 OK, the old route answers 404
   - test: read the allowlist setting; jupyter labextension list and the commands list on the running server
   - test-tags: MANUAL
   - mechanism: 2026-11-11T22:53:38Z @kj update the allowlist setting; install and reload once approved; verify the command list and the extension name
   - log: 2026-11-11T22:53:38Z @kj added
   - log: 2026-11-11T22:56:48Z @kj edited text "the live lab's stored commands allowlist names the new command ids, and the installed extension reports the new name after an approved install and reload" -> "the live lab's stored allowlist names the new command ids and no old voice-capture command id remains, and the installed extension reports the new name after an approved install and reload"; reason: the user ordered the allowlist updated with the new ids and the old ids removed
+  - log: 2026-11-12T01:40:49Z @kj closed: live lab moved to the new ids
 - [x] `ACC-NAME-93-TESTS` **Suites pass under the renamed module** - HIGH; Jest, pytest and Galata pass with the renamed module, labextension name and command ids
   - evidence: tsc exit 0; lint 0 problems; Jest 6 suites / 63 tests passed; pytest 92 passed; Galata 20 passed / 2 skipped / 0 failed on the renamed module and labextension
   - test: jlpm test; pytest; the Galata spec through the bubblewrap runner
@@ -814,8 +831,10 @@ New package, labextension, command and repository names, and the republish under
   - mechanism: 2026-11-11T22:53:39Z @kj update the test imports, selectors and activation message expectations with the rename
   - log: 2026-11-11T22:53:39Z @kj added
   - log: 2026-11-12T00:49:09Z @kj closed: suites green under the new names
-- [ ] `ACC-NAME-94-SKILL` **Agent skill renamed** - HIGH; the shipped agent skill is renamed jupyterlab-audio-extension, installed under share/jupyter/agents/skills/, and names the new CLI, command ids and repository
+- [x] `ACC-NAME-94-SKILL` **Agent skill renamed** - HIGH; the shipped agent skill is renamed jupyterlab-audio-extension, installed under share/jupyter/agents/skills/, and names the new CLI, command ids and repository
+  - evidence: the installed skill sits at share/jupyter/agents/skills/jupyterlab-audio-extension; the old skill directory is absent
   - test: install the wheel; the skill lands at share/jupyter/agents/skills/jupyterlab-audio-extension; grep the new names
   - test-tags: MANUAL
   - mechanism: 2026-11-11T22:56:48Z @kj rename the skill directory and its pyproject data-files path; rewrite the skill text for the new names
   - log: 2026-11-11T22:56:48Z @kj added
+  - log: 2026-11-12T01:40:50Z @kj closed: skill renamed
