@@ -8,12 +8,12 @@ has_ai_rules: false
 has_binder: false
 has_settings: true
 kind: frontend-and-server
-labextension_name: '@stellarshenson/jupyterlab-voice-capture-extension'
+labextension_name: '@stellarshenson/jupyterlab-audio-extension'
 project_short_description: JupyterLab extension that captures microphone audio in
     the browser and streams it to a server-side bridge, exposing it as a virtual audio
     source so terminal applications running in the container (such as Claude Code
     voice mode) can record from the user's microphone
-python_name: jupyterlab_voice_capture_extension
-repository: https://github.com/stellarshenson/jupyterlab_voice_capture_extension
+python_name: jupyterlab_audio_extension
+repository: https://github.com/stellarshenson/jupyterlab_audio_extension
 test: true
 
