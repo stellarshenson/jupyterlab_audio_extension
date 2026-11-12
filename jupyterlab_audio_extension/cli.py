@@ -1,4 +1,4 @@
-"""Operator CLI for the voice-capture container plumbing.
+"""Operator CLI for the audio-capture container plumbing.
 
 The extension itself never starts or configures PulseAudio or SoX - per the acceptance
 criteria (group F) that plumbing is out of scope of the browser + bridge halves. This CLI
@@ -297,7 +297,7 @@ def cmd_install(args) -> int:
     dry = args.dry_run
     user = _current_user()
 
-    print("Provisioning voice-capture plumbing (operator tool; the extension never does this).")
+    print("Provisioning audio-capture plumbing (operator tool; the extension never does this).")
     if dry:
         print(_c("DRY RUN - nothing will be executed.", "yellow") + "\n")
 
@@ -337,13 +337,13 @@ def cmd_install(args) -> int:
 
     print("\nDone. install does not start the daemon. Next steps:\n")
     print("  1) start the bridge (also re-run after every container restart):")
-    print("       jupyterlab_voice_capture start -d")
+    print("       jupyterlab_audio start -d")
     print("  2) set the SoX driver in the shell that launches claude:")
     print("       bash:  export AUDIODRIVER=pulseaudio")
     print("       fish:  set -gx AUDIODRIVER pulseaudio")
     print(
         "\nThen verify with:\n"
-        "  jupyterlab_voice_capture validate"
+        "  jupyterlab_audio validate"
     )
     return 0
 
@@ -377,19 +377,19 @@ def cmd_validate(args) -> int:
         (f"runtime dir {sink_dir}", os.path.isdir(sink_dir),
          f"sudo install -d -m 0755 -o $(id -un) -g $(id -gn) {sink_dir}"),
         (f"FIFO {sink}", fifo_ok,
-         "created by module-pipe-source: jupyterlab_voice_capture start"),
+         "created by module-pipe-source: jupyterlab_audio start"),
         ("PulseAudio daemon reachable", rc_info == 0,
-         "jupyterlab_voice_capture start"),
+         "jupyterlab_audio start"),
         (f"source '{SOURCE_NAME}' connected", (SOURCE_NAME in sources) and fifo_ok,
-         "jupyterlab_voice_capture start"),
+         "jupyterlab_audio start"),
         (f"default source is '{SOURCE_NAME}'", default_source == SOURCE_NAME and fifo_ok,
-         f"jupyterlab_voice_capture start  (or: pactl set-default-source {SOURCE_NAME})"),
+         f"jupyterlab_audio start  (or: pactl set-default-source {SOURCE_NAME})"),
         (f"speaker FIFO {speaker}", speaker_ok,
-         "created by module-pipe-sink: jupyterlab_voice_capture start"),
+         "created by module-pipe-sink: jupyterlab_audio start"),
         (f"sink '{SPEAKER_SINK_NAME}' connected", (SPEAKER_SINK_NAME in sinks) and speaker_ok,
-         "jupyterlab_voice_capture start"),
+         "jupyterlab_audio start"),
         (f"default sink is '{SPEAKER_SINK_NAME}'", default_sink == SPEAKER_SINK_NAME and speaker_ok,
-         f"jupyterlab_voice_capture start  (or: pactl set-default-sink {SPEAKER_SINK_NAME})"),
+         f"jupyterlab_audio start  (or: pactl set-default-sink {SPEAKER_SINK_NAME})"),
         ("default-server in client.conf", _client_conf_has_default_server(),
          f'echo "default-server = unix:{PULSE_SOCKET}" | sudo tee -a {PULSE_CLIENT_CONF}'),
         ("AUDIODRIVER=pulseaudio in this env", os.environ.get("AUDIODRIVER") == "pulseaudio",
@@ -398,7 +398,7 @@ def cmd_validate(args) -> int:
 
     missing = [(label, fix) for label, ok, fix in checks if not ok]
     ok_all = not missing
-    sink_line = f'c.VoiceCapture.sink_path = "{sink}"'
+    sink_line = f'c.AudioCapture.sink_path = "{sink}"'
 
     if args.json:
         _color(False)
@@ -418,7 +418,7 @@ def cmd_validate(args) -> int:
         print(json.dumps(payload, indent=2))
         return 0 if ok_all else 1
 
-    print("Voice-capture component check\n")
+    print("Audio-capture component check\n")
     for label, ok, _fix in checks:
         print(f"  {_ok() if ok else _miss()}  {label}")
 
@@ -466,7 +466,7 @@ def cmd_start(args) -> int:
     if not _daemon_running() or not _source_loaded() or not _sink_loaded():
         print(
             f"Failed to start the PulseAudio daemon or load source '{SOURCE_NAME}' "
-            f"or sink '{SPEAKER_SINK_NAME}' - run: jupyterlab_voice_capture validate"
+            f"or sink '{SPEAKER_SINK_NAME}' - run: jupyterlab_audio validate"
         )
         return 1
     try:
@@ -476,7 +476,7 @@ def cmd_start(args) -> int:
     if args.detached:
         print(
             "Daemon running (detached). Stop it with: "
-            "jupyterlab_voice_capture stop"
+            "jupyterlab_audio stop"
         )
         return 0
     print("Daemon running. Press Ctrl-C to stop.")
@@ -516,7 +516,10 @@ def _config_has_sink_path(path: str) -> bool:
                 stripped = raw.strip()
                 if not stripped or stripped.startswith("#"):
                     continue
-                if "c.VoiceCapture.sink_path" in stripped:
+                if (
+                    "c.AudioCapture.sink_path" in stripped
+                    or "c.VoiceCapture.sink_path" in stripped
+                ):
                     return True
     except OSError:
         pass
@@ -524,10 +527,10 @@ def _config_has_sink_path(path: str) -> bool:
 
 
 def _write_sink_config(cfg: str, sink: str, dry: bool) -> None:
-    """Write the `c.VoiceCapture.sink_path` line into the Jupyter server config if absent."""
-    setting = f'c.VoiceCapture.sink_path = "{sink}"'
+    """Write the `c.AudioCapture.sink_path` line into the Jupyter server config if absent."""
+    setting = f'c.AudioCapture.sink_path = "{sink}"'
     if not dry and _config_has_sink_path(cfg):
-        print(f"  c.VoiceCapture.sink_path already set in {cfg} - leaving it")
+        print(f"  sink_path already set in {cfg} - leaving it")
         return
     if dry:
         print(f"  $ printf '\\n{setting}\\n' >> {cfg}")
@@ -545,8 +548,8 @@ def _write_sink_config(cfg: str, sink: str, dry: bool) -> None:
 def main(argv=None) -> int:
     raw = argparse.RawDescriptionHelpFormatter
     parser = argparse.ArgumentParser(
-        prog="jupyterlab_voice_capture",
-        description="Provision and verify the voice-capture container plumbing\n"
+        prog="jupyterlab_audio",
+        description="Provision and verify the audio-capture container plumbing\n"
         "(PulseAudio + SoX bridge for the FIFO the extension writes).",
         epilog="exit codes:\n"
         "  0  success\n"
@@ -569,12 +572,12 @@ def main(argv=None) -> int:
         description="Install pulseaudio, pulseaudio-utils, sox and libsox-fmt-pulse with apt-get\n"
         "(through sudo when not root, which asks for a password), create the directory of\n"
         "--sink-path, and add default-server to /etc/pulse/client.conf and\n"
-        "c.VoiceCapture.sink_path to ~/.jupyter/jupyter_server_config.py where missing.\n"
+        "c.AudioCapture.sink_path to ~/.jupyter/jupyter_server_config.py where missing.\n"
         "Does not start the daemon. Prints each command it runs, then the next steps when no\n"
         "step failed.",
         epilog="examples:\n"
-        "  jupyterlab_voice_capture install --dry-run\n"
-        "  jupyterlab_voice_capture install",
+        "  jupyterlab_audio install --dry-run\n"
+        "  jupyterlab_audio install",
         formatter_class=raw,
     )
     p_install.add_argument(
@@ -593,10 +596,10 @@ def main(argv=None) -> int:
         "and sink voiceout, the default source and sink, default-server in\n"
         "/etc/pulse/client.conf and AUDIODRIVER=pulseaudio in this environment. Prints\n"
         "[ OK ] or [MISS] per check, how to fix each missing one and the\n"
-        "c.VoiceCapture.sink_path line. Exits 1 when a component is missing.",
+        "c.AudioCapture.sink_path line. Exits 1 when a component is missing.",
         epilog="examples:\n"
-        "  jupyterlab_voice_capture validate\n"
-        "  jupyterlab_voice_capture validate --json",
+        "  jupyterlab_audio validate\n"
+        "  jupyterlab_audio validate --json",
         formatter_class=raw,
     )
     p_validate.add_argument(
@@ -617,8 +620,8 @@ def main(argv=None) -> int:
         "restart. Without -d it waits until Ctrl-C, which stops the daemon. Prints each\n"
         "command it runs; exits 1 when voicein or voiceout did not load.",
         epilog="examples:\n"
-        "  jupyterlab_voice_capture start -d\n"
-        "  jupyterlab_voice_capture start -d --sink-path /run/voice/pulseaudio.fifo",
+        "  jupyterlab_audio start -d\n"
+        "  jupyterlab_audio start -d --sink-path /run/voice/pulseaudio.fifo",
         formatter_class=raw,
     )
     p_start.add_argument(
@@ -638,7 +641,7 @@ def main(argv=None) -> int:
         description="Kill the PulseAudio daemon. The microphone source voicein and the speaker sink\n"
         "voiceout go with it: programs in the container record and play nothing. This cannot\n"
         "be undone without start. Prints whether the daemon was running.",
-        epilog="examples:\n  jupyterlab_voice_capture stop",
+        epilog="examples:\n  jupyterlab_audio stop",
         formatter_class=raw,
     )
     p_stop.add_argument(

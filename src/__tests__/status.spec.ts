@@ -2,7 +2,7 @@ import { ServerConnection } from '@jupyterlab/services';
 
 import { Signal } from '@lumino/signaling';
 
-import type { VoiceCapture, VoiceCaptureState } from '../voice-capture';
+import type { AudioCapture, AudioCaptureState } from '../audio-capture';
 
 import { VoiceStatus } from '../status';
 
@@ -25,7 +25,7 @@ const SETTINGS = {
   token: 'secret-token'
 } as any;
 
-const ROUTE = 'http://localhost/jupyterlab-voice-capture-extension/player';
+const ROUTE = 'http://localhost/jupyterlab-audio-extension/player';
 
 const SINK_READY = { state: 'ready' };
 const SINK_OFF = { state: 'off' };
@@ -60,9 +60,9 @@ const settle = (): Promise<void> =>
 
 /** The model surface VoiceStatus reads; state and message are set per case. */
 class Model {
-  state: VoiceCaptureState = 'idle';
+  state: AudioCaptureState = 'idle';
   message = '';
-  readonly stateChanged = new Signal<this, VoiceCaptureState>(this);
+  readonly stateChanged = new Signal<this, AudioCaptureState>(this);
   readonly toggle = jest.fn();
 }
 
@@ -90,15 +90,13 @@ function controls(widget: VoiceStatus): IControls {
 
 /** The leading audio-system lamp's state, read from data-vc-lamp. */
 function lamp(widget: VoiceStatus): string | undefined {
-  return widget.node.querySelector<HTMLElement>('.jp-VoiceCapture-lamp')
-    ?.dataset.vcLamp;
+  return widget.node.querySelector<HTMLElement>('.jp-Audio-lamp')?.dataset
+    .vcLamp;
 }
 
 /** The lamp's plain audio-system tooltip; its title and aria-label must agree. */
 function lampTitle(widget: VoiceStatus): string {
-  const element = widget.node.querySelector<HTMLElement>(
-    '.jp-VoiceCapture-lamp'
-  )!;
+  const element = widget.node.querySelector<HTMLElement>('.jp-Audio-lamp')!;
   const title = element.title;
   expect(element.getAttribute('aria-label')).toBe(title);
   return title;
@@ -117,14 +115,14 @@ afterEach(() => {
 });
 
 function create(
-  state: VoiceCaptureState = 'idle',
+  state: AudioCaptureState = 'idle',
   message = ''
 ): { widget: VoiceStatus; model: Model } {
   const model = new Model();
   model.state = state;
   model.message = message;
   return {
-    widget: new VoiceStatus(model as unknown as VoiceCapture, SETTINGS),
+    widget: new VoiceStatus(model as unknown as AudioCapture, SETTINGS),
     model
   };
 }
@@ -134,10 +132,10 @@ describe('VoiceStatus pill', () => {
     const { widget } = create();
     await settle();
 
-    expect(widget.node.classList.contains('jp-VoiceCapture-status')).toBe(true);
-    expect(widget.node.classList.contains('jp-VoiceCapture-pill')).toBe(true);
+    expect(widget.node.classList.contains('jp-Audio-status')).toBe(true);
+    expect(widget.node.classList.contains('jp-Audio-pill')).toBe(true);
     const order = Array.from(widget.node.children).map(el =>
-      el.classList.contains('jp-VoiceCapture-lamp')
+      el.classList.contains('jp-Audio-lamp')
         ? 'lamp'
         : ((el as HTMLElement).dataset.vcControl ?? 'divider')
     );
@@ -150,7 +148,7 @@ describe('VoiceStatus pill', () => {
       'divider',
       'pause'
     ]);
-    const lampElement = widget.node.querySelector('.jp-VoiceCapture-lamp');
+    const lampElement = widget.node.querySelector('.jp-Audio-lamp');
     expect(lampElement).not.toBeNull();
     expect(lampElement!.getAttribute('role')).toBe('img');
     expect(lampElement!.getAttribute('aria-label')).toBe('Audio system ready');
@@ -173,11 +171,11 @@ describe('VoiceStatus pill', () => {
     widget.dispose();
   });
 
-  const CASES: ReadonlyArray<[VoiceCaptureState, string]> = [
-    ['idle', 'Disconnected - Voice capture off - click to start'],
-    ['connecting', 'Connecting - Voice capture connecting...'],
-    ['streaming', 'Connected - Voice capture on - streaming to server'],
-    ['error', 'Error - Voice capture error']
+  const CASES: ReadonlyArray<[AudioCaptureState, string]> = [
+    ['idle', 'Disconnected - Audio capture off - click to start'],
+    ['connecting', 'Connecting - Audio capture connecting...'],
+    ['streaming', 'Connected - Audio capture on - streaming to server'],
+    ['error', 'Error - Audio capture error']
   ];
 
   it.each(CASES)(
@@ -187,7 +185,7 @@ describe('VoiceStatus pill', () => {
       await settle();
 
       expect(widget.node.textContent).toBe('');
-      expect(widget.node.querySelector('.jp-VoiceCapture-label')).toBeNull();
+      expect(widget.node.querySelector('.jp-Audio-label')).toBeNull();
       expect(widget.node.title).toBe(title);
       expect(widget.node.dataset.vcState).toBe(state);
       expect(widget.node.classList.contains(`jp-mod-${state}`)).toBe(true);
@@ -214,16 +212,16 @@ describe('VoiceStatus pill', () => {
     await settle();
 
     const { mic, play, pause } = controls(widget);
-    expect(mic.className).toBe('jp-VoiceCapture-control jp-VoiceCapture-mic');
-    expect(play.className).toBe('jp-VoiceCapture-control');
-    expect(pause.className).toBe('jp-VoiceCapture-control');
+    expect(mic.className).toBe('jp-Audio-control jp-Audio-mic');
+    expect(play.className).toBe('jp-Audio-control');
+    expect(pause.className).toBe('jp-Audio-control');
     for (const button of [mic, play, pause]) {
       expect(button.getAttribute('style')).toBeNull();
     }
 
     model.state = 'streaming';
     model.stateChanged.emit('streaming');
-    expect(mic.className).toBe('jp-VoiceCapture-control jp-VoiceCapture-mic');
+    expect(mic.className).toBe('jp-Audio-control jp-Audio-mic');
 
     widget.dispose();
   });
@@ -233,8 +231,8 @@ describe('VoiceStatus pill', () => {
     await settle();
 
     const { root, mic, pause } = controls(widget);
-    expect(mic.classList.contains('jp-VoiceCapture-control')).toBe(true);
-    expect(pause.classList.contains('jp-VoiceCapture-control')).toBe(true);
+    expect(mic.classList.contains('jp-Audio-control')).toBe(true);
+    expect(pause.classList.contains('jp-Audio-control')).toBe(true);
     // The idle pill paints the microphone in the control grey; the segment itself stays
     // clickable because it is a toggle, not a player control.
     expect(mic.disabled).toBe(false);
@@ -333,7 +331,7 @@ describe('VoiceStatus player controls', () => {
       'Play - Audio output is unavailable'
     );
     for (const tip of [play.title, play.getAttribute('aria-label') ?? '']) {
-      expect(tip).not.toMatch(/fifo|\/|start -d|jupyterlab_voice_capture/i);
+      expect(tip).not.toMatch(/fifo|\/|start -d|jupyterlab_audio/i);
     }
     expect(play.dataset.vcFace).toBe('play');
     expect(root.dataset.vcPlayer).toBe('idle');
@@ -465,10 +463,47 @@ describe('VoiceStatus lamp', () => {
       'Stop - Audio output is shut down'
     );
     for (const tip of [play.title, play.getAttribute('aria-label') ?? '']) {
-      expect(tip).not.toMatch(/fifo|\/|start -d|jupyterlab_voice_capture/i);
+      expect(tip).not.toMatch(/fifo|\/|start -d|jupyterlab_audio/i);
     }
 
     widget.dispose();
+  });
+
+  it('ACC-CTRL-95-CROSSED: the pill root mirrors the lamp state and the lamp keeps its own', async () => {
+    const { widget, model } = create();
+    await settle();
+    const lampElement =
+      widget.node.querySelector<HTMLElement>('.jp-Audio-lamp')!;
+
+    expect(widget.node.dataset.vcLamp).toBe('ready');
+    expect(lampElement.dataset.vcLamp).toBe('ready');
+
+    model.state = 'streaming';
+    model.stateChanged.emit('streaming');
+    expect(widget.node.dataset.vcLamp).toBe('active');
+    expect(lampElement.dataset.vcLamp).toBe('active');
+    widget.dispose();
+
+    request.mockImplementation(async () =>
+      response({ ...IDLE, sink: SINK_MISSING })
+    );
+    const missing = create().widget;
+    await settle();
+    expect(missing.node.dataset.vcLamp).toBe('fault');
+    expect(lamp(missing)).toBe('fault');
+    expect(
+      missing.node.querySelector('.jp-Audio-lamp')!.getAttribute('data-vc-lamp')
+    ).toBe('fault');
+    missing.dispose();
+
+    request.mockImplementation(async () =>
+      response({ ...IDLE, sink: SINK_OFF })
+    );
+    const off = create().widget;
+    await settle();
+    expect(off.node.dataset.vcLamp).toBe('off');
+    expect(lamp(off)).toBe('off');
+    off.dispose();
   });
 });
 

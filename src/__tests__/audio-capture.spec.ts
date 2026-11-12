@@ -1,6 +1,6 @@
 import plugin from '../index';
 
-import { VoiceCapture } from '../voice-capture';
+import { AudioCapture } from '../audio-capture';
 
 // The plugin's commands without the speaker, the status widget and the modules Jest cannot
 // load, which the plugin imports only for their tokens.
@@ -13,7 +13,7 @@ jest.mock('../speaker', () => ({
 }));
 jest.mock('../status', () => ({
   VoiceStatus: class {
-    constructor(readonly model: VoiceCapture) {}
+    constructor(readonly model: AudioCapture) {}
   }
 }));
 
@@ -146,9 +146,9 @@ beforeEach(() => {
   (globalThis as any).URL.revokeObjectURL = jest.fn();
 });
 
-describe('VoiceCapture', () => {
+describe('AudioCapture', () => {
   it('captures at 16 kHz, connects with the token, and reaches Connected', async () => {
-    const vc = new VoiceCapture(SETTINGS);
+    const vc = new AudioCapture(SETTINGS);
     await vc.enable();
 
     expect((navigator as any).mediaDevices.getUserMedia).toHaveBeenCalledWith({
@@ -156,7 +156,7 @@ describe('VoiceCapture', () => {
     });
     expect(FakeAudioContext.last.sampleRate).toBe(16000); // B1
     expect(FakeWebSocket.last.url).toContain(
-      'jupyterlab-voice-capture-extension/stream'
+      'jupyterlab-audio-extension/stream'
     );
     expect(FakeWebSocket.last.url).toContain('token=secret-token'); // C1
     expect(FakeWebSocket.last.binaryType).toBe('arraybuffer'); // B4
@@ -169,7 +169,7 @@ describe('VoiceCapture', () => {
   });
 
   it('forwards a frame pushed by the worklet to the websocket', async () => {
-    const vc = new VoiceCapture(SETTINGS);
+    const vc = new AudioCapture(SETTINGS);
     await vc.enable();
     FakeWebSocket.last._open();
 
@@ -185,7 +185,7 @@ describe('VoiceCapture', () => {
   });
 
   it('does not send frames before the socket is open', async () => {
-    const vc = new VoiceCapture(SETTINGS);
+    const vc = new AudioCapture(SETTINGS);
     await vc.enable(); // connecting, not open yet
     FakeWorkletNode.last.port.onmessage!({ data: new ArrayBuffer(8) });
     expect(FakeWebSocket.last.sent).toHaveLength(0);
@@ -193,7 +193,7 @@ describe('VoiceCapture', () => {
   });
 
   it('releases the mic and closes the socket on disable (A3/D2)', async () => {
-    const vc = new VoiceCapture(SETTINGS);
+    const vc = new AudioCapture(SETTINGS);
     await vc.enable();
     FakeWebSocket.last._open();
 
@@ -216,7 +216,7 @@ describe('VoiceCapture', () => {
       .fn()
       .mockRejectedValue(denied);
 
-    const vc = new VoiceCapture(SETTINGS);
+    const vc = new AudioCapture(SETTINGS);
     await vc.enable();
 
     expect(vc.state).toBe('error');
@@ -227,7 +227,7 @@ describe('VoiceCapture', () => {
 
   it('refuses to capture outside a secure context (E3)', async () => {
     (window as any).isSecureContext = false;
-    const vc = new VoiceCapture(SETTINGS);
+    const vc = new AudioCapture(SETTINGS);
     await vc.enable();
 
     expect(vc.state).toBe('error');
@@ -237,7 +237,7 @@ describe('VoiceCapture', () => {
   });
 
   it('captures nothing until it is turned on (A1)', () => {
-    const vc = new VoiceCapture(SETTINGS);
+    const vc = new AudioCapture(SETTINGS);
     expect((navigator as any).mediaDevices.getUserMedia).not.toHaveBeenCalled();
     expect(vc.state).toBe('idle');
 
@@ -255,7 +255,7 @@ describe('VoiceCapture', () => {
       () => new Promise(resolve => (grant = resolve))
     );
     (FakeWebSocket as any).last = undefined;
-    const vc = new VoiceCapture(SETTINGS);
+    const vc = new AudioCapture(SETTINGS);
 
     vc.toggle(); // enable: waiting on the permission prompt
     vc.toggle(); // disable before the prompt resolves
@@ -272,7 +272,7 @@ describe('VoiceCapture', () => {
   it('schedules nothing while idle (D4)', async () => {
     jest.useFakeTimers();
     try {
-      const vc = new VoiceCapture(SETTINGS);
+      const vc = new AudioCapture(SETTINGS);
       expect(jest.getTimerCount()).toBe(0);
 
       await vc.enable();
@@ -292,7 +292,7 @@ describe('VoiceCapture', () => {
       .mockRejectedValue(
         Object.assign(new Error('none'), { name: 'NotFoundError' })
       );
-    const vc = new VoiceCapture(SETTINGS);
+    const vc = new AudioCapture(SETTINGS);
     await vc.enable();
 
     expect(vc.state).toBe('error');
@@ -304,7 +304,7 @@ describe('VoiceCapture', () => {
   it('reconnects after a dropped connection and keeps capture on (D1)', async () => {
     jest.useFakeTimers();
     try {
-      const vc = new VoiceCapture(SETTINGS);
+      const vc = new AudioCapture(SETTINGS);
       await vc.enable();
       const first = FakeWebSocket.last;
       first._open();
@@ -327,7 +327,7 @@ describe('VoiceCapture', () => {
   it('stops without reconnecting when another tab takes over (D3)', async () => {
     jest.useFakeTimers();
     try {
-      const vc = new VoiceCapture(SETTINGS);
+      const vc = new AudioCapture(SETTINGS);
       await vc.enable();
       const first = FakeWebSocket.last;
       first._open();
@@ -351,7 +351,7 @@ describe('VoiceCapture', () => {
       .mockRejectedValue(
         Object.assign(new Error('denied'), { name: 'NotAllowedError' })
       );
-    const vc = new VoiceCapture(SETTINGS);
+    const vc = new AudioCapture(SETTINGS);
     await vc.enable();
     expect(vc.state).toBe('error');
 
@@ -369,7 +369,7 @@ describe('VoiceCapture', () => {
   it('disconnects on a click in the endpoint-unreachable error (E4)', async () => {
     jest.useFakeTimers();
     try {
-      const vc = new VoiceCapture(SETTINGS);
+      const vc = new AudioCapture(SETTINGS);
       await vc.enable();
       jest.advanceTimersByTime(10000); // connect deadline → error, still retrying
       expect(vc.state).toBe('error');
@@ -388,8 +388,8 @@ describe('VoiceCapture', () => {
   });
 });
 
-const ENABLE = 'voice-capture:enable';
-const DISABLE = 'voice-capture:disable';
+const ENABLE = 'audio:enable';
+const DISABLE = 'audio:disable';
 
 /** Activates the plugin with a status bar only: runs its commands, reads its model's state. */
 function activatePlugin(): {
@@ -408,7 +408,7 @@ function activatePlugin(): {
     null,
     {
       registerStatusItem: (id: string, options: any) => {
-        if (id === 'jupyterlab_voice_capture_extension:status') {
+        if (id === 'jupyterlab_audio_extension:status') {
           status = options.item;
         }
       }
@@ -421,7 +421,7 @@ function activatePlugin(): {
   };
 }
 
-describe('voice-capture:enable and voice-capture:disable', () => {
+describe('audio:enable and audio:disable', () => {
   it('enable resolves once streaming, and a second enable does nothing', async () => {
     const lab = activatePlugin();
     let resolved = false;
@@ -463,7 +463,7 @@ describe('voice-capture:enable and voice-capture:disable', () => {
         .mockResolvedValue(stream);
       const unreachable = activatePlugin();
       const rejected = expect(unreachable.execute(ENABLE)).rejects.toThrow(
-        'Voice-capture endpoint unreachable'
+        'Audio-capture endpoint unreachable'
       );
       await jest.advanceTimersByTimeAsync(10000);
       await rejected;
@@ -482,7 +482,7 @@ describe('voice-capture:enable and voice-capture:disable', () => {
       );
       const lab = activatePlugin();
       const unanswered =
-        'Answer the microphone permission prompt in the JupyterLab tab, then run voice-capture:enable again.';
+        'Answer the microphone permission prompt in the JupyterLab tab, then run audio:enable again.';
 
       // A first enable, then a second one while the prompt is still open.
       for (let run = 0; run < 2; run++) {

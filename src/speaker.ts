@@ -4,14 +4,14 @@ import { ServerConnection } from '@jupyterlab/services';
 
 import { SPEAKER_SAMPLE_RATE } from './pcm';
 
-import { voiceCaptureWsUrl } from './request';
+import { audioCaptureWsUrl } from './request';
 
 import {
   SPEAKER_PROCESSOR_NAME,
   speakerWorkletModuleUrl
 } from './speaker-worklet';
 
-import { BASE_BACKOFF_MS, MAX_BACKOFF_MS } from './voice-capture';
+import { BASE_BACKOFF_MS, MAX_BACKOFF_MS } from './audio-capture';
 
 const GESTURE_EVENTS = ['pointerdown', 'keydown'];
 // Audio that arrives while the context is not running is held this long, then dropped.
@@ -103,7 +103,7 @@ export class Speaker {
 
   private _connect(): void {
     const ws = new WebSocket(
-      voiceCaptureWsUrl(this._serverSettings, 'speaker')
+      audioCaptureWsUrl(this._serverSettings, 'speaker')
     );
     ws.binaryType = 'arraybuffer';
     ws.onopen = () => {

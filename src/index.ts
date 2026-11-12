@@ -13,21 +13,21 @@ import { ISettingRegistry } from '@jupyterlab/settingregistry';
 
 import { IStatusBar } from '@jupyterlab/statusbar';
 
-// eslint-disable-next-line jupyter/prefer-lazy-imports -- activate() creates the model at once; VoiceCapture is needed for the status item
-import { CONNECT_TIMEOUT_MS, VoiceCapture } from './voice-capture';
+// eslint-disable-next-line jupyter/prefer-lazy-imports -- activate() creates the model at once; AudioCapture is needed for the status item
+import { CONNECT_TIMEOUT_MS, AudioCapture } from './audio-capture';
 
 // eslint-disable-next-line jupyter/prefer-lazy-imports -- activate() registers the status item at once
 import { VoiceStatus } from './status';
 
-const PLUGIN_ID = '@stellarshenson/jupyterlab-voice-capture-extension:plugin';
-const TOGGLE_COMMAND = 'voice-capture:toggle';
-const PLAYER_COMMAND = 'voice-capture:player';
-const ENABLE_COMMAND = 'voice-capture:enable';
-const DISABLE_COMMAND = 'voice-capture:disable';
+const PLUGIN_ID = '@stellarshenson/jupyterlab-audio-extension:plugin';
+const TOGGLE_COMMAND = 'audio:toggle';
+const PLAYER_COMMAND = 'audio:player';
+const ENABLE_COMMAND = 'audio:enable';
+const DISABLE_COMMAND = 'audio:disable';
 const NO_ARGS = { args: { type: 'object', properties: {} } };
 
 /**
- * Initialization data for the @stellarshenson/jupyterlab-voice-capture-extension extension.
+ * Initialization data for the @stellarshenson/jupyterlab-audio-extension extension.
  */
 const plugin: JupyterFrontEndPlugin<void> = {
   id: PLUGIN_ID,
@@ -42,7 +42,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
     settingRegistry: ISettingRegistry | null
   ) => {
     console.log(
-      'JupyterLab extension @stellarshenson/jupyterlab-voice-capture-extension is activated!'
+      'JupyterLab extension @stellarshenson/jupyterlab-audio-extension is activated!'
     );
 
     // Playback is always on: this tab plays the container's default PulseAudio sink.
@@ -53,7 +53,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
     });
     speaker.catch(reason => {
       console.error(
-        'Failed to start jupyterlab_voice_capture_extension speaker playback.',
+        'Failed to start jupyterlab_audio_extension speaker playback.',
         reason
       );
     });
@@ -94,35 +94,30 @@ const plugin: JupyterFrontEndPlugin<void> = {
       execute: async args => {
         const settings = app.serviceManager.serverSettings;
         const response = await ServerConnection.makeRequest(
-          URLExt.join(
-            settings.baseUrl,
-            'jupyterlab-voice-capture-extension',
-            'player'
-          ),
+          URLExt.join(settings.baseUrl, 'jupyterlab-audio-extension', 'player'),
           { method: 'POST', body: JSON.stringify(args) },
           settings
         );
         const state = await response.json();
         if (!response.ok) {
           throw new Error(
-            state.message ||
-              `voice-capture:player failed: HTTP ${response.status}`
+            state.message || `audio:player failed: HTTP ${response.status}`
           );
         }
         return state;
       }
     });
 
-    const model = new VoiceCapture(app.serviceManager.serverSettings);
+    const model = new AudioCapture(app.serviceManager.serverSettings);
     // The relay runs a command in one tab only, while each tab owns its own capture.
     const disableChannel = new BroadcastChannel(
-      'jupyterlab-voice-capture-extension:disable'
+      'jupyterlab-audio-extension:disable'
     );
     disableChannel.onmessage = () => model.disable();
 
     app.commands.addCommand(TOGGLE_COMMAND, {
       // eslint-disable-next-line jupyter/no-untranslated-string -- no translator
-      label: 'Toggle Voice Capture',
+      label: 'Toggle Audio Capture',
       describedBy: NO_ARGS,
       isToggled: () => model.enabled,
       execute: () => model.toggle()
@@ -131,7 +126,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
     // For agents (jupyterlab-commands execute); not in the palette, which has the toggle.
     app.commands.addCommand(ENABLE_COMMAND, {
       // eslint-disable-next-line jupyter/no-untranslated-string -- no translator, as for TOGGLE_COMMAND
-      label: 'Enable Voice Capture',
+      label: 'Enable Audio Capture',
       describedBy: NO_ARGS,
       // Settles when the state leaves connecting: the model's connect deadline bounds the wait.
       // An open permission prompt changes no state and would hold the relay, which runs one
@@ -144,7 +139,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
               model.stateChanged.disconnect(settled);
               reject(
                 new Error(
-                  'Answer the microphone permission prompt in the JupyterLab tab, then run voice-capture:enable again.'
+                  'Answer the microphone permission prompt in the JupyterLab tab, then run audio:enable again.'
                 )
               );
             }, CONNECT_TIMEOUT_MS);
@@ -160,7 +155,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
         }
         if (model.state !== 'streaming') {
           throw new Error(
-            model.message || 'Voice capture was turned off before it connected.'
+            model.message || 'Audio capture was turned off before it connected.'
           );
         }
       }
@@ -168,7 +163,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
     app.commands.addCommand(DISABLE_COMMAND, {
       // eslint-disable-next-line jupyter/no-untranslated-string -- no translator, as for TOGGLE_COMMAND
-      label: 'Disable Voice Capture',
+      label: 'Disable Audio Capture',
       describedBy: NO_ARGS,
       execute: () => {
         disableChannel.postMessage(null);
@@ -178,24 +173,21 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
     if (palette) {
       // eslint-disable-next-line jupyter/no-untranslated-string -- no translator, as for TOGGLE_COMMAND
-      palette.addItem({ command: TOGGLE_COMMAND, category: 'Voice Capture' });
+      palette.addItem({ command: TOGGLE_COMMAND, category: 'Audio' });
       palette.addItem({
         command: PLAYER_COMMAND,
         args: { action: 'stop' },
         // eslint-disable-next-line jupyter/no-untranslated-string -- no translator, as for TOGGLE_COMMAND
-        category: 'Voice Capture'
+        category: 'Audio'
       });
     }
 
     if (statusBar) {
-      statusBar.registerStatusItem(
-        'jupyterlab_voice_capture_extension:status',
-        {
-          item: new VoiceStatus(model, app.serviceManager.serverSettings),
-          align: 'left',
-          rank: 100
-        }
-      );
+      statusBar.registerStatusItem('jupyterlab_audio_extension:status', {
+        item: new VoiceStatus(model, app.serviceManager.serverSettings),
+        align: 'left',
+        rank: 100
+      });
     }
 
     if (settingRegistry) {
@@ -209,7 +201,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
         })
         .catch(reason => {
           console.error(
-            'Failed to load jupyterlab_voice_capture_extension settings.',
+            'Failed to load jupyterlab_audio_extension settings.',
             reason
           );
         });

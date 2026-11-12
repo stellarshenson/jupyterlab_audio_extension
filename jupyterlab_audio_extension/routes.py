@@ -1,4 +1,4 @@
-"""Server routes for the voice-capture extension.
+"""Server routes for the audio-capture extension.
 
 Registers three authenticated endpoints under the Jupyter base URL: ``/stream`` receives
 binary PCM frames from the browser and forwards them, in order, to the FIFO sink;
@@ -31,13 +31,13 @@ SUPERSEDED_CLOSE_CODE = 4001
 RECONNECT_CLOSE_CODE = 1001
 
 # Key of the set in web_app.settings that holds every open /stream and /speaker connection.
-CONNECTIONS_KEY = "voice_capture_connections"
+CONNECTIONS_KEY = "audio_capture_connections"
 
 # 0.5 s of 48 kHz stereo s16le: while more than this waits unsent, new speaker data is dropped.
 MAX_PENDING_SPEAKER_BYTES = 96000
 
 
-class VoiceCaptureWebSocketHandler(WebSocketMixin, WebSocketHandler, JupyterHandler):
+class AudioCaptureWebSocketHandler(WebSocketMixin, WebSocketHandler, JupyterHandler):
     """Receives binary PCM frames and writes them to the FIFO sink.
 
     Auth is enforced by ``@ws_authenticated`` on ``get`` (C1). Only one producer streams
@@ -46,7 +46,7 @@ class VoiceCaptureWebSocketHandler(WebSocketMixin, WebSocketHandler, JupyterHand
     """
 
     # Class-level reference to the currently streaming handler (single producer).
-    _active: "VoiceCaptureWebSocketHandler | None" = None
+    _active: "AudioCaptureWebSocketHandler | None" = None
 
     def initialize(self, sink=None):
         self._sink = sink
@@ -60,17 +60,17 @@ class VoiceCaptureWebSocketHandler(WebSocketMixin, WebSocketHandler, JupyterHand
 
     def open(self, *args, **kwargs):
         # Last-writer takeover (D3): close any existing producer before taking over.
-        existing = VoiceCaptureWebSocketHandler._active
+        existing = AudioCaptureWebSocketHandler._active
         if existing is not None and existing is not self:
             try:
                 existing.close(SUPERSEDED_CLOSE_CODE, "superseded by a new producer")
             except Exception:  # noqa: BLE001 - never let a stale socket block the new one
                 pass
-        VoiceCaptureWebSocketHandler._active = self
+        AudioCaptureWebSocketHandler._active = self
         self.settings[CONNECTIONS_KEY].add(self)
         # super().open() starts the keep-alive ping-pong loop (WebSocketMixin).
         super().open()
-        self.log.info("voice-capture: producer connected")
+        self.log.info("audio-capture: producer connected")
 
     def on_message(self, message):
         # Only binary PCM frames are expected (B4); ignore any text message.
@@ -78,10 +78,10 @@ class VoiceCaptureWebSocketHandler(WebSocketMixin, WebSocketHandler, JupyterHand
             self._sink.write(bytes(message))
 
     def on_close(self):
-        if VoiceCaptureWebSocketHandler._active is self:
-            VoiceCaptureWebSocketHandler._active = None
+        if AudioCaptureWebSocketHandler._active is self:
+            AudioCaptureWebSocketHandler._active = None
         self.settings[CONNECTIONS_KEY].discard(self)
-        self.log.info("voice-capture: producer disconnected")
+        self.log.info("audio-capture: producer disconnected")
 
 
 class SpeakerWebSocketHandler(WebSocketMixin, WebSocketHandler, JupyterHandler):
@@ -111,7 +111,7 @@ class SpeakerWebSocketHandler(WebSocketMixin, WebSocketHandler, JupyterHandler):
         # Runs on the reader thread; write_message must run on the IOLoop.
         self._reader.listener = lambda data: loop.add_callback(self._broadcast, data)
         super().open()
-        self.log.info("voice-capture: speaker listener connected")
+        self.log.info("audio-capture: speaker listener connected")
 
     @classmethod
     def _broadcast(cls, data):
@@ -141,7 +141,7 @@ class SpeakerWebSocketHandler(WebSocketMixin, WebSocketHandler, JupyterHandler):
         self.settings[CONNECTIONS_KEY].discard(self)
         if not SpeakerWebSocketHandler._listeners:
             self._reader.listener = None
-        self.log.info("voice-capture: speaker listener disconnected")
+        self.log.info("audio-capture: speaker listener disconnected")
 
 
 class PlayerHandler(APIHandler):
@@ -203,7 +203,7 @@ def _remove_previous_routes(web_app, prefix):
             for rule in old:
                 active = getattr(rule.target, "_active", None)
                 if active is not None:
-                    active.close(RECONNECT_CLOSE_CODE, "voice-capture server extension closed")
+                    active.close(RECONNECT_CLOSE_CODE, "audio-capture server extension closed")
                 rules.remove(rule)
             if old and not rules:
                 router.rules.remove(host_rule)
@@ -214,19 +214,22 @@ def setup_route_handlers(web_app, sink, reader, player):
     base_url = web_app.settings["base_url"]
 
     _remove_previous_routes(
+        web_app, url_path_join(base_url, "jupyterlab-audio-extension") + "/"
+    )
+    _remove_previous_routes(
         web_app, url_path_join(base_url, "jupyterlab-voice-capture-extension") + "/"
     )
     stream_route = url_path_join(
-        base_url, "jupyterlab-voice-capture-extension", "stream"
+        base_url, "jupyterlab-audio-extension", "stream"
     )
     speaker_route = url_path_join(
-        base_url, "jupyterlab-voice-capture-extension", "speaker"
+        base_url, "jupyterlab-audio-extension", "speaker"
     )
     player_route = url_path_join(
-        base_url, "jupyterlab-voice-capture-extension", "player"
+        base_url, "jupyterlab-audio-extension", "player"
     )
     handlers = [
-        (stream_route, VoiceCaptureWebSocketHandler, {"sink": sink}),
+        (stream_route, AudioCaptureWebSocketHandler, {"sink": sink}),
         (speaker_route, SpeakerWebSocketHandler, {"reader": reader}),
         (player_route, PlayerHandler, {"player": player, "speaker": reader}),
     ]

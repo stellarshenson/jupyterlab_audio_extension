@@ -6,7 +6,7 @@ import { LabIcon } from '@jupyterlab/ui-components';
 
 import { Widget } from '@lumino/widgets';
 
-import { VoiceCapture, VoiceCaptureState } from './voice-capture';
+import { AudioCapture, AudioCaptureState } from './audio-capture';
 
 const STATUS_POLL_MS = 2000;
 // The missing-sink episode blinks for this long, then the lamp settles to the off ring.
@@ -32,22 +32,22 @@ const STOP_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fi
 </svg>`;
 
 export const micIcon = new LabIcon({
-  name: 'voice-capture:mic',
+  name: 'audio:mic',
   svgstr: MIC_SVG
 });
 
 export const playIcon = new LabIcon({
-  name: 'voice-capture:play',
+  name: 'audio:play',
   svgstr: PLAY_SVG
 });
 
 export const pauseIcon = new LabIcon({
-  name: 'voice-capture:pause',
+  name: 'audio:pause',
   svgstr: PAUSE_SVG
 });
 
 export const stopIcon = new LabIcon({
-  name: 'voice-capture:stop',
+  name: 'audio:stop',
   svgstr: STOP_SVG
 });
 
@@ -62,18 +62,18 @@ interface IPlayerState {
 
 type PlayerMode = 'playing' | 'paused' | 'idle';
 
-const LABELS: Record<VoiceCaptureState, string> = {
+const LABELS: Record<AudioCaptureState, string> = {
   idle: 'Disconnected',
   connecting: 'Connecting',
   streaming: 'Connected',
   error: 'Error'
 };
 
-const TITLES: Record<VoiceCaptureState, string> = {
-  idle: 'Voice capture off - click to start',
-  connecting: 'Voice capture connecting...',
-  streaming: 'Voice capture on - streaming to server',
-  error: 'Voice capture error'
+const TITLES: Record<AudioCaptureState, string> = {
+  idle: 'Audio capture off - click to start',
+  connecting: 'Audio capture connecting...',
+  streaming: 'Audio capture on - streaming to server',
+  error: 'Audio capture error'
 };
 
 const PLAY_LABELS: Record<PlayerMode, string> = {
@@ -95,15 +95,15 @@ const PAUSE_LABEL = 'Pause';
  * left in the play tooltip; a deliberate shutdown shows the ring at once.
  */
 export class VoiceStatus extends Widget {
-  constructor(model: VoiceCapture, settings: ServerConnection.ISettings) {
+  constructor(model: AudioCapture, settings: ServerConnection.ISettings) {
     super();
     this._model = model;
     this._settings = settings;
-    this.addClass('jp-VoiceCapture-status');
-    this.addClass('jp-VoiceCapture-pill');
+    this.addClass('jp-Audio-status');
+    this.addClass('jp-Audio-pill');
 
     this._lamp = document.createElement('span');
-    this._lamp.className = 'jp-VoiceCapture-lamp';
+    this._lamp.className = 'jp-Audio-lamp';
     this._lamp.setAttribute('role', 'img');
     this._mic = this._createMic();
     this._play = this._createControl('play');
@@ -137,10 +137,10 @@ export class VoiceStatus extends Widget {
   private _createMic(): HTMLButtonElement {
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = 'jp-VoiceCapture-control jp-VoiceCapture-mic';
+    button.className = 'jp-Audio-control jp-Audio-mic';
     button.dataset.vcControl = 'mic';
     const icon = document.createElement('span');
-    icon.className = 'jp-VoiceCapture-icon';
+    icon.className = 'jp-Audio-icon';
     button.appendChild(icon);
     micIcon.element({ container: icon });
     button.addEventListener('click', this._onMic);
@@ -150,10 +150,10 @@ export class VoiceStatus extends Widget {
   private _createControl(control: 'play' | 'pause'): HTMLButtonElement {
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = 'jp-VoiceCapture-control';
+    button.className = 'jp-Audio-control';
     button.dataset.vcControl = control;
     const icon = document.createElement('span');
-    icon.className = 'jp-VoiceCapture-icon';
+    icon.className = 'jp-Audio-icon';
     button.appendChild(icon);
     button.addEventListener(
       'click',
@@ -169,7 +169,7 @@ export class VoiceStatus extends Widget {
 
   private _divider(): HTMLSpanElement {
     const divider = document.createElement('span');
-    divider.className = 'jp-VoiceCapture-divider';
+    divider.className = 'jp-Audio-divider';
     return divider;
   }
 
@@ -245,7 +245,9 @@ export class VoiceStatus extends Widget {
       lamp = 'ready';
     }
     this._lamp.dataset.vcLamp = lamp;
-    // The lamp names the whole audio system, not the voice-capture state.
+    // Mirrored on the root for the shut-down control marking in style/base.css.
+    this.node.dataset.vcLamp = lamp;
+    // The lamp names the whole audio system, not the audio-capture state.
     const title =
       this._sink === 'missing'
         ? 'Audio system unavailable'
@@ -279,7 +281,7 @@ export class VoiceStatus extends Widget {
       const response = await ServerConnection.makeRequest(
         URLExt.join(
           this._settings.baseUrl,
-          'jupyterlab-voice-capture-extension',
+          'jupyterlab-audio-extension',
           'player'
         ),
         { method: 'POST', body: JSON.stringify({ action }) },
@@ -306,7 +308,7 @@ export class VoiceStatus extends Widget {
     void this._request('pause');
   };
 
-  private _model: VoiceCapture;
+  private _model: AudioCapture;
   private _settings: ServerConnection.ISettings;
   private _lamp: HTMLSpanElement;
   private _mic: HTMLButtonElement;

@@ -19,7 +19,7 @@ test('should emit an activation console message', async ({ page }) => {
     logs.filter(
       s =>
         s ===
-        'JupyterLab extension @stellarshenson/jupyterlab-voice-capture-extension is activated!'
+        'JupyterLab extension @stellarshenson/jupyterlab-audio-extension is activated!'
     )
   ).toHaveLength(1);
 });

@@ -3,7 +3,7 @@ import { ServerConnection } from '@jupyterlab/services';
 import plugin from '../index';
 
 // The plugin without the speaker, the status widget and the modules Jest cannot load,
-// which the plugin imports only for their tokens, as in voice-capture.spec.ts.
+// which the plugin imports only for their tokens, as in audio-capture.spec.ts.
 jest.mock('@jupyterlab/apputils', () => ({}));
 jest.mock('@jupyterlab/statusbar', () => ({}));
 jest.mock('../speaker', () => ({
@@ -29,7 +29,7 @@ const SETTINGS = {
   token: 'secret-token'
 } as any;
 
-const PLAYER = 'voice-capture:player';
+const PLAYER = 'audio:player';
 const STATE = {
   paused: false,
   stopped: false,
@@ -64,7 +64,7 @@ afterEach(() => {
   jest.restoreAllMocks();
 });
 
-describe('voice-capture:player', () => {
+describe('audio:player', () => {
   it('posts the action to the player route and returns the state', async () => {
     const request = jest
       .spyOn(ServerConnection, 'makeRequest')
@@ -82,9 +82,7 @@ describe('voice-capture:player', () => {
     expect(state).toEqual(STATE);
     expect(request).toHaveBeenCalledTimes(1);
     const [[url, init]] = request.mock.calls;
-    expect(url).toBe(
-      'http://localhost/jupyterlab-voice-capture-extension/player'
-    );
+    expect(url).toBe('http://localhost/jupyterlab-audio-extension/player');
     expect(init.method).toBe('POST');
     expect(JSON.parse(init.body as string)).toEqual(args);
   });
@@ -130,21 +128,21 @@ describe('Stop All Audio', () => {
 
     expect(item).toBeDefined();
     expect(item.args).toEqual({ action: 'stop' });
-    expect(item.category).toBe('Voice Capture');
+    expect(item.category).toBe('Audio');
     const label = commands.get(PLAYER).label;
     expect(label({ action: 'stop' })).toBe('Stop All Audio');
     expect(label()).toBe('Audio Player'); // the relay reads the label with no args
   });
 });
 
-describe('retired commands', () => {
-  it('registers the player and neither play-file nor stop-playback', () => {
+describe('command table', () => {
+  it('registers exactly the toggle, player, enable and disable commands', () => {
     const { commands } = activate();
-    expect(commands.has(PLAYER)).toBe(true);
-    expect(commands.has('voice-capture:play-file')).toBe(false);
-    expect(commands.has('voice-capture:stop-playback')).toBe(false);
-    expect(
-      FakeBroadcastChannel.names.some(name => name.includes('stop-playback'))
-    ).toBe(false);
+    expect([...commands.keys()].sort()).toEqual([
+      'audio:disable',
+      'audio:enable',
+      'audio:player',
+      'audio:toggle'
+    ]);
   });
 });

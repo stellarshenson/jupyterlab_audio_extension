@@ -7,19 +7,19 @@ import * as path from 'path';
 /**
  * Functional tests: a real JupyterLab, a real browser with Chromium's fake microphone, the
  * real server handler, and a FIFO read by fifo_reader.py in place of PulseAudio. Ids in
- * the test titles are the criteria in docs/acc-crit-voice-capture.md.
+ * the test titles are the criteria in docs/acc-crit-audio.md.
  */
 
 const SINK = process.env.VOICE_TEST_SINK as string;
-const STATUS = '.jp-VoiceCapture-status[data-vc-state]';
-const ICON = '.jp-VoiceCapture-icon';
+const STATUS = '.jp-Audio-status[data-vc-state]';
+const ICON = '.jp-Audio-icon';
 const BYTES_PER_SECOND = 16000 * 2; // 16 kHz, mono, 2 bytes per sample
 
 const SPEAKER_FIFO = path.join(path.dirname(SINK), 'speaker.fifo');
 const SPEAKER_BYTES_PER_SECOND = 48000 * 4; // 48 kHz, stereo, 2 bytes per sample
 const TONE_AMPLITUDE = 0.5; // of full scale, written by speaker_writer.py
 const PLAYING = TONE_AMPLITUDE / 2; // analyser peak above which the tab plays the tone
-const SPEAKER_OPEN = 'voice-capture test: speaker socket open';
+const SPEAKER_OPEN = 'audio-capture test: speaker socket open';
 const LOGO = '#jp-MainLogo'; // a click target with no action of its own
 
 test.use({ autoGoto: false });
@@ -44,7 +44,7 @@ function instrument(options: { denyMic?: boolean }): void {
   w.WebSocket = class extends NativeWebSocket {
     constructor(url: string | URL, protocols?: string | string[]) {
       super(url, protocols);
-      if (!String(url).includes('jupyterlab-voice-capture-extension/stream')) {
+      if (!String(url).includes('jupyterlab-audio-extension/stream')) {
         return;
       }
       vc.sockets.push(this);
@@ -181,7 +181,7 @@ class FifoReader {
   private _last: ISample = { t: 0, bytes: 0, peak: 0 };
 }
 
-test.describe('voice capture', () => {
+test.describe('audio capture', () => {
   let reader: FifoReader;
 
   test.beforeEach(async () => {
@@ -202,7 +202,7 @@ test.describe('voice capture', () => {
     await expect(status).toHaveText('');
     await expect(status).toHaveAttribute(
       'title',
-      'Disconnected - Voice capture off - click to start'
+      'Disconnected - Audio capture off - click to start'
     );
     expect(await animation(page)).toBe('none');
 
@@ -226,8 +226,36 @@ test.describe('voice capture', () => {
     });
     await expect(status).toHaveAttribute(
       'title',
-      'Connected - Voice capture on - streaming to server'
+      'Connected - Audio capture on - streaming to server'
     );
+    // ACC-CTRL-81-BLOCK: the streaming microphone carries the active lamp's green, one
+    // hex per theme: #6dbd81 on dark, #347443 on light. The lamp follows the sink, not
+    // capture (A2 has no speaker FIFO), so compare its rule's declared colour instead.
+    const [micColour, lampColour, light] = await status.evaluate(el => {
+      const mic = el.querySelector('[data-vc-control="mic"]') as HTMLElement;
+      const light = document.body.dataset.jpThemeLight === 'true';
+      const base = ".jp-Audio-lamp[data-vc-lamp='active']";
+      const selector = light ? `[data-jp-theme-light='true'] ${base}` : base;
+      let declared = '';
+      for (const sheet of Array.from(document.styleSheets)) {
+        for (const rule of Array.from(sheet.cssRules)) {
+          const css = rule as CSSStyleRule;
+          // CSSOM serialises attribute values with double quotes; equality keeps the
+          // light override out of the dark lookup, which includes() would match.
+          if (css.selectorText?.replace(/"/g, "'") === selector) {
+            declared = css.style.background;
+          }
+        }
+      }
+      const probe = document.createElement('span');
+      probe.style.background = declared;
+      document.body.appendChild(probe);
+      const lampColour = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      return [getComputedStyle(mic).color, lampColour, light] as const;
+    });
+    expect(micColour).toBe(light ? 'rgb(52, 116, 67)' : 'rgb(109, 189, 129)');
+    expect(lampColour).toBe(micColour);
     expect(await animation(page)).toBe('none');
     expect((await record(page)).liveTracks).toBe(1);
 
@@ -258,7 +286,7 @@ test.describe('voice capture', () => {
     await expect(status).toHaveAttribute('data-vc-state', 'idle');
     await expect(status).toHaveAttribute(
       'title',
-      'Disconnected - Voice capture off - click to start'
+      'Disconnected - Audio capture off - click to start'
     );
     await expect
       .poll(async () => (await record(page)).liveTracks, { timeout: 1000 })
@@ -266,7 +294,7 @@ test.describe('voice capture', () => {
     await reader.waitForRate(page, rate => rate === 0, 1000);
   });
 
-  test('A5/A6: voice-capture:enable resolves streaming, voice-capture:disable stops, a repeat does nothing', async ({
+  test('A5/A6: audio:enable resolves streaming, audio:disable stops, a repeat does nothing', async ({
     page,
     baseURL
   }) => {
@@ -291,25 +319,25 @@ test.describe('voice capture', () => {
           ]
       );
 
-    expect(await execute('voice-capture:enable')).toBe('streaming');
+    expect(await execute('audio:enable')).toBe('streaming');
     await expect(status).toHaveAttribute(
       'title',
-      'Connected - Voice capture on - streaming to server'
+      'Connected - Audio capture on - streaming to server'
     );
     expect(await socket()).toBe('open');
     await reader.waitForBytes(BYTES_PER_SECOND / 2);
-    expect(await execute('voice-capture:enable')).toBe('streaming');
+    expect(await execute('audio:enable')).toBe('streaming');
     expect(await record(page)).toMatchObject({ gum: 1, sockets: 1 });
 
-    expect(await execute('voice-capture:disable')).toBe('idle');
+    expect(await execute('audio:disable')).toBe('idle');
     await expect(status).toHaveAttribute(
       'title',
-      'Disconnected - Voice capture off - click to start'
+      'Disconnected - Audio capture off - click to start'
     );
     await expect.poll(socket).toBe('closed');
     expect((await record(page)).liveTracks).toBe(0);
     await reader.waitForRate(page, rate => rate === 0, 1000);
-    expect(await execute('voice-capture:disable')).toBe('idle');
+    expect(await execute('audio:disable')).toBe('idle');
     expect(await record(page)).toMatchObject({ gum: 1, sockets: 1 });
   });
 
@@ -325,13 +353,13 @@ test.describe('voice capture', () => {
       'title',
       'Error - Microphone permission denied.'
     );
-    expect(await animation(page)).toBe('vc-blink');
+    expect(await animation(page)).toBe('audio-blink');
 
     await status.locator('[data-vc-control="mic"]').click();
     await expect(status).toHaveAttribute('data-vc-state', 'idle');
     await expect(status).toHaveAttribute(
       'title',
-      'Disconnected - Voice capture off - click to start'
+      'Disconnected - Audio capture off - click to start'
     );
     await page.waitForTimeout(1000);
     expect((await record(page)).gum).toBe(1);
@@ -476,7 +504,7 @@ function tapSpeaker(marker: string): void {
   w.WebSocket = class extends NativeWebSocket {
     constructor(url: string | URL, protocols?: string | string[]) {
       super(url, protocols);
-      if (!String(url).includes('jupyterlab-voice-capture-extension/speaker')) {
+      if (!String(url).includes('jupyterlab-audio-extension/speaker')) {
         return;
       }
       spk.sockets.push(this);
@@ -805,7 +833,7 @@ test.describe('player', () => {
     const posted = page.waitForRequest(
       request =>
         request.method() === 'POST' &&
-        request.url().includes('jupyterlab-voice-capture-extension/player') &&
+        request.url().includes('jupyterlab-audio-extension/player') &&
         (request.postData() ?? '').includes('"stop"')
     );
     await item.click();
@@ -821,8 +849,8 @@ test.describe('player', () => {
   }) => {
     await openLab(page, `${baseURL}/lab`);
     const pill = page.locator(STATUS);
-    await expect(pill).toHaveClass(/jp-VoiceCapture-pill/);
-    await expect(page.locator('.jp-VoiceCapture-playback')).toHaveCount(0);
+    await expect(pill).toHaveClass(/jp-Audio-pill/);
+    await expect(page.locator('.jp-Audio-playback')).toHaveCount(0);
     await expect(pill).toHaveAttribute('data-vc-player', 'idle');
 
     const mic = pill.locator('[data-vc-control="mic"]');
@@ -831,7 +859,7 @@ test.describe('player', () => {
     await expect(mic).toBeVisible();
     await expect(play).toBeVisible();
     await expect(pause).toBeVisible();
-    await expect(pill.locator('.jp-VoiceCapture-divider')).toHaveCount(3);
+    await expect(pill.locator('.jp-Audio-divider')).toHaveCount(3);
 
     // The smaller squircle: 4 px corners, 22 px controls and 15 px icons.
     expect(
@@ -862,40 +890,62 @@ test.describe('player', () => {
     await expect(pause).toBeDisabled();
     await expect(play).toHaveAttribute('data-vc-face', 'play');
 
-    // Flat: every segment paints the pill's own background, hover included (ACC-CTRL-74).
+    // The shallow chip (ACC-CTRL-81-BLOCK): the fill is the 50% layout-color1 mix, the
+    // border paints the same colour, and the dividers stay visible against it.
+    const resolved = await page.evaluate(() => {
+      const probe = document.createElement('span');
+      document.body.appendChild(probe);
+      probe.style.backgroundColor =
+        'color-mix(in srgb, var(--jp-layout-color1) 50%, var(--jp-layout-color2))';
+      const fill = getComputedStyle(probe).backgroundColor;
+      probe.style.backgroundColor = 'var(--jp-border-color0)';
+      const divider = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      return { fill, divider };
+    });
     const background = await pill.evaluate(
       el => getComputedStyle(el).backgroundColor
     );
+    expect(background).not.toBe('rgba(0, 0, 0, 0)');
+    expect(background).toBe(resolved.fill);
+    expect(await pill.evaluate(el => getComputedStyle(el).borderTopColor)).toBe(
+      background
+    );
+    const dividers = await pill.evaluate(el =>
+      Array.from(
+        el.querySelectorAll('.jp-Audio-divider'),
+        node => getComputedStyle(node).backgroundColor
+      )
+    );
+    expect(dividers).toHaveLength(3);
+    for (const colour of dividers) {
+      expect(colour).toBe(resolved.divider);
+    }
+
+    // Flat: every segment adds no tint of its own; the pill's fill shows through (ACC-CTRL-74).
     for (const control of [mic, play, pause]) {
       expect(
         await control.evaluate(el => getComputedStyle(el).backgroundColor)
-      ).toBe(background);
+      ).toBe('rgba(0, 0, 0, 0)');
     }
     await mic.hover();
     expect(await mic.evaluate(el => getComputedStyle(el).backgroundColor)).toBe(
-      background
+      'rgba(0, 0, 0, 0)'
     );
 
-    // ACC-CTRL-75: the microphone uses the controls' disabled and enabled colours.
+    // ACC-CTRL-75: the idle microphone uses the controls' disabled colour; the streaming
+    // green is measured in A2, where capture really streams (ACC-CTRL-81-BLOCK).
     const colours = await pill.evaluate(el => {
       const mic = el.querySelector('[data-vc-control="mic"]') as HTMLElement;
       const pause = el.querySelector(
         '[data-vc-control="pause"]'
       ) as HTMLButtonElement;
-      const disabled = getComputedStyle(pause).color;
-      const wasDisabled = pause.disabled;
-      pause.disabled = false;
-      const enabled = getComputedStyle(pause).color;
-      pause.disabled = wasDisabled;
-
-      const idle = getComputedStyle(mic).color;
-      el.classList.add('jp-mod-streaming');
-      const streaming = getComputedStyle(mic).color;
-      el.classList.remove('jp-mod-streaming');
-      return { disabled, enabled, idle, streaming };
+      return {
+        disabled: getComputedStyle(pause).color,
+        idle: getComputedStyle(mic).color
+      };
     });
     expect(colours.idle).toBe(colours.disabled);
-    expect(colours.streaming).toBe(colours.enabled);
   });
 
   test('ACC-PLAYER-71/ACC-CTRL-72/73/77: a missing speaker sink blinks the lamp with a plain tooltip', async ({
@@ -905,7 +955,7 @@ test.describe('player', () => {
     await openLab(page, `${baseURL}/lab`);
     const pill = page.locator(STATUS);
     const play = pill.locator('[data-vc-control="play"]');
-    const lamp = pill.locator('.jp-VoiceCapture-lamp');
+    const lamp = pill.locator('.jp-Audio-lamp');
     await expect(lamp).toHaveAttribute('data-vc-lamp', 'fault');
     await expect(lamp).toHaveAttribute('role', 'img');
     await expect(lamp).toHaveAttribute('title', 'Audio system unavailable');
@@ -921,7 +971,7 @@ test.describe('player', () => {
       'Play - Audio output is unavailable'
     );
     expect(await lamp.evaluate(el => getComputedStyle(el).animationName)).toBe(
-      'vc-blink'
+      'audio-blink'
     );
 
     const warn = await page.evaluate(() => {
@@ -936,18 +986,10 @@ test.describe('player', () => {
       await lamp.evaluate(el => getComputedStyle(el).backgroundColor)
     ).toBe(warn);
 
-    // The pill border and tint stay unchanged: no warning class, plain border colour.
+    // The pill's chip stays unchanged: no warning class, the border still paints the fill.
     await expect(pill).not.toHaveClass(/jp-mod-sink-error/);
-    const border = await page.evaluate(() => {
-      const probe = document.createElement('span');
-      probe.style.borderColor = 'var(--jp-border-color2)';
-      document.body.appendChild(probe);
-      const colour = getComputedStyle(probe).borderTopColor;
-      probe.remove();
-      return colour;
-    });
     expect(await pill.evaluate(el => getComputedStyle(el).borderTopColor)).toBe(
-      border
+      await pill.evaluate(el => getComputedStyle(el).backgroundColor)
     );
   });
 
@@ -961,7 +1003,10 @@ test.describe('player', () => {
     }
     await openLab(page, `${baseURL}/lab`);
     const pill = page.locator(STATUS);
-    const lamp = pill.locator('.jp-VoiceCapture-lamp');
+    const lamp = pill.locator('.jp-Audio-lamp');
+    const mic = pill.locator('[data-vc-control="mic"]');
+    const play = pill.locator('[data-vc-control="play"]');
+    const pause = pill.locator('[data-vc-control="pause"]');
     await expect(lamp).toHaveAttribute('data-vc-lamp', 'fault');
 
     expect(spawnSync('mkfifo', [SPEAKER_FIFO]).status).toBe(0);
@@ -970,8 +1015,18 @@ test.describe('player', () => {
         timeout: 10000
       });
       await expect(lamp).toHaveAttribute('title', 'Audio system ready');
-      await expect(pill.locator('[data-vc-control="play"]')).toBeDisabled();
-      await expect(pill.locator('[data-vc-control="pause"]')).toBeDisabled();
+      await expect(play).toBeDisabled();
+      await expect(pause).toBeDisabled();
+
+      // ACC-CTRL-95-CROSSED: the marking is shut-down only.
+      for (const control of [mic, play, pause]) {
+        const content = await control.evaluate(el => ({
+          before: getComputedStyle(el, '::before').content,
+          after: getComputedStyle(el, '::after').content
+        }));
+        expect(content.before).toBe('none');
+        expect(content.after).toBe('none');
+      }
     } finally {
       fs.unlinkSync(SPEAKER_FIFO);
     }
@@ -986,7 +1041,8 @@ test.describe('player', () => {
     }
     await openLab(page, `${baseURL}/lab`);
     const pill = page.locator(STATUS);
-    const lamp = pill.locator('.jp-VoiceCapture-lamp');
+    const lamp = pill.locator('.jp-Audio-lamp');
+    const mic = pill.locator('[data-vc-control="mic"]');
     const play = pill.locator('[data-vc-control="play"]');
     const pause = pill.locator('[data-vc-control="pause"]');
     await expect(lamp).toHaveAttribute('data-vc-lamp', 'fault');
@@ -1013,29 +1069,51 @@ test.describe('player', () => {
         'title',
         'Play - Audio output is shut down'
       );
+
+      // ACC-CTRL-95-CROSSED: the shut-down pill marks each control with a chip-coloured
+      // cutout under a slash in the control's own colour.
+      await expect(pill).toHaveAttribute('data-vc-lamp', 'off');
+      const pillFill = await pill.evaluate(
+        el => getComputedStyle(el).backgroundColor
+      );
+      for (const control of [mic, play, pause]) {
+        const marking = await control.evaluate(el => {
+          const before = getComputedStyle(el, '::before');
+          const after = getComputedStyle(el, '::after');
+          return {
+            cutout: before.backgroundColor,
+            slashContent: after.content,
+            slashColour: after.backgroundColor,
+            controlColour: getComputedStyle(el).color
+          };
+        });
+        expect(marking.slashContent).not.toBe('none');
+        expect(marking.slashColour).toBe(marking.controlColour);
+        expect(marking.cutout).toBe(pillFill);
+      }
     } finally {
       fs.unlinkSync(marker);
     }
   });
 });
 
-/** Executes voice-capture:player in the page: the state as JSON, or the rejection message. */
+/** Executes audio:player in the page: the state as JSON, or the rejection message. */
 function playerExpression(body: object): string {
   return `window.jupyterapp.commands
-    .execute('voice-capture:player', ${JSON.stringify(body)})
+    .execute('audio:player', ${JSON.stringify(body)})
     .then(state => JSON.stringify(state), e => e.message)`;
 }
 
 /**
  * The real chain, skipped unless VOICE_TEST_PULSE_SERVER names an isolated PulseAudio server
- * on which `jupyterlab_voice_capture start` loaded the bridge for VOICE_TEST_SINK. paplay of
+ * on which `jupyterlab_audio start` loaded the bridge for VOICE_TEST_SINK. paplay of
  * VOICE_TEST_PLAY_FILE into voiceout must be heard in the tab while the tab's microphone
  * streams into voicein.
  *
  *   A=$(mktemp -d /tmp/vcspk.XXXXXX) && mkdir $A/run
  *   PULSE_RUNTIME_PATH=$A PULSE_STATE_PATH=$A/state pulseaudio -n --daemonize=yes \
  *     --exit-idle-time=-1 --load=module-native-protocol-unix
- *   PULSE_SERVER=unix:$A/native python -c "import jupyterlab_voice_capture_extension.cli as c; \
+ *   PULSE_SERVER=unix:$A/native python -c "import jupyterlab_audio_extension.cli as c; \
  *     c.PULSE_RUNTIME_PATH = '$A'; \
  *     raise SystemExit(c.main(['start', '-d', '--sink-path', '$A/run/pulseaudio.fifo']))"
  *   VOICE_TEST_PULSE_SERVER=unix:$A/native VOICE_TEST_SINK=$A/run/pulseaudio.fifo \

@@ -12,6 +12,8 @@ from pathlib import Path
 
 import pytest
 import tornado.httpclient
+from jupyter_server.utils import url_path_join
+from tornado.routing import PathMatches
 
 
 @pytest.fixture
@@ -23,7 +25,7 @@ def voice_sink_path(tmp_path):
 def jp_server_config(jp_server_config, voice_sink_path):
     """Extend the base server config with a per-test FIFO sink path."""
     config = dict(jp_server_config)
-    config["VoiceCapture"] = {"sink_path": voice_sink_path}
+    config["AudioCapture"] = {"sink_path": voice_sink_path}
     return config
 
 
@@ -35,7 +37,7 @@ async def test_pcm_written_verbatim(jp_ws_fetch, voice_sink_path):
     rfd = os.open(voice_sink_path, os.O_RDONLY | os.O_NONBLOCK)
     try:
         ws = await jp_ws_fetch(
-            "jupyterlab-voice-capture-extension", "stream"
+            "jupyterlab-audio-extension", "stream"
         )
         payload = bytes(range(256)) + bytes(range(256))  # 512 bytes of known PCM
         await ws.write_message(payload, binary=True)
@@ -63,7 +65,7 @@ async def test_multiframe_round_trip_in_order(jp_ws_fetch, voice_sink_path):
     os.mkfifo(voice_sink_path)  # reader owns FIFO creation
     rfd = os.open(voice_sink_path, os.O_RDONLY | os.O_NONBLOCK)
     try:
-        ws = await jp_ws_fetch("jupyterlab-voice-capture-extension", "stream")
+        ws = await jp_ws_fetch("jupyterlab-audio-extension", "stream")
         frames = [bytes([i]) * 640 for i in range(20)]  # 20 frames, 12800 bytes total
         received = b""
         # Two bursts of 6400 bytes: the sink drops what the FIFO cannot hold, and the kernel
@@ -81,14 +83,14 @@ async def test_multiframe_round_trip_in_order(jp_ws_fetch, voice_sink_path):
 
 async def test_tolerates_absent_reader(jp_ws_fetch):
     # C3: streaming with no FIFO reader attached must not crash the server.
-    ws = await jp_ws_fetch("jupyterlab-voice-capture-extension", "stream")
+    ws = await jp_ws_fetch("jupyterlab-audio-extension", "stream")
     for _ in range(10):
         await ws.write_message(b"\x00\x01" * 320, binary=True)  # 640-byte frames
     await asyncio.sleep(0.2)
     ws.close()
 
     # The server is still responsive: a fresh connection succeeds.
-    ws2 = await jp_ws_fetch("jupyterlab-voice-capture-extension", "stream")
+    ws2 = await jp_ws_fetch("jupyterlab-audio-extension", "stream")
     ws2.close()
 
 
@@ -96,12 +98,12 @@ def test_endpoint_requires_authentication():
     # C1: the stream endpoint enforces Jupyter auth. @ws_authenticated stamps
     # __allow_unauthenticated = False on get, which is the flag jupyter_server's own
     # auth layer checks to reject anonymous connections before the websocket upgrade.
-    from jupyterlab_voice_capture_extension.routes import (
-        VoiceCaptureWebSocketHandler,
+    from jupyterlab_audio_extension.routes import (
+        AudioCaptureWebSocketHandler,
     )
 
     assert (
-        getattr(VoiceCaptureWebSocketHandler.get, "__allow_unauthenticated", True)
+        getattr(AudioCaptureWebSocketHandler.get, "__allow_unauthenticated", True)
         is False
     )
 
@@ -124,7 +126,7 @@ async def test_wrong_token_is_refused(jp_ws_fetch):
     # C1 live: a connection without a valid Jupyter token is refused before the upgrade.
     with pytest.raises(tornado.httpclient.HTTPClientError) as refused:
         await jp_ws_fetch(
-            "jupyterlab-voice-capture-extension",
+            "jupyterlab-audio-extension",
             "stream",
             headers={"Authorization": "token not-the-server-token"},
         )
@@ -133,7 +135,7 @@ async def test_wrong_token_is_refused(jp_ws_fetch):
 
 async def test_streaming_never_creates_the_fifo(jp_ws_fetch, voice_sink_path):
     # C4: the reader owns FIFO creation; streaming with no reader leaves the path absent.
-    ws = await jp_ws_fetch("jupyterlab-voice-capture-extension", "stream")
+    ws = await jp_ws_fetch("jupyterlab-audio-extension", "stream")
     for _ in range(10):
         await ws.write_message(b"\x00\x01" * 320, binary=True)
     await asyncio.sleep(0.5)
@@ -145,7 +147,7 @@ async def test_regular_file_at_sink_path_is_never_written(jp_ws_fetch, voice_sin
     # C5: a regular file that appears at the sink path after startup is never written to.
     with open(voice_sink_path, "wb"):
         pass
-    ws = await jp_ws_fetch("jupyterlab-voice-capture-extension", "stream")
+    ws = await jp_ws_fetch("jupyterlab-audio-extension", "stream")
     for _ in range(10):
         await ws.write_message(b"\x00\x01" * 320, binary=True)
     await asyncio.sleep(0.5)
@@ -159,7 +161,7 @@ async def test_new_reader_gets_audio_after_the_old_one_left(jp_ws_fetch, voice_s
     os.mkfifo(voice_sink_path)
     frame = b"\x01\x02" * 320
     rfd = os.open(voice_sink_path, os.O_RDONLY | os.O_NONBLOCK)
-    ws = await jp_ws_fetch("jupyterlab-voice-capture-extension", "stream")
+    ws = await jp_ws_fetch("jupyterlab-audio-extension", "stream")
     await ws.write_message(frame, binary=True)
     assert len(await _read_at_least(rfd, len(frame))) >= len(frame)
     os.close(rfd)  # the reader goes away; the next write hits a broken pipe
@@ -181,7 +183,7 @@ async def test_new_reader_gets_audio_after_the_old_one_left(jp_ws_fetch, voice_s
 async def test_reader_never_gets_audio_from_before_it_attached(jp_ws_fetch, voice_sink_path):
     # A reader that attaches later gets live audio only, never frames that arrived while no
     # reader existed (PulseAudio stopped, or the FIFO not yet created).
-    ws = await jp_ws_fetch("jupyterlab-voice-capture-extension", "stream")
+    ws = await jp_ws_fetch("jupyterlab-audio-extension", "stream")
     for _ in range(5):
         await ws.write_message(b"\xaa" * 640, binary=True)
     await asyncio.sleep(0.6)
@@ -203,7 +205,7 @@ async def test_reader_never_gets_audio_from_before_it_attached(jp_ws_fetch, voic
 
 @pytest.fixture
 def speaker_path(voice_sink_path):
-    from jupyterlab_voice_capture_extension.speaker import SPEAKER_FIFO_NAME
+    from jupyterlab_audio_extension.speaker import SPEAKER_FIFO_NAME
 
     return os.path.join(os.path.dirname(voice_sink_path), SPEAKER_FIFO_NAME)
 
@@ -223,14 +225,14 @@ async def _receive(ws, n):
 
 
 async def test_speaker_without_a_token_is_refused(jp_ws_fetch):
-    from jupyterlab_voice_capture_extension.routes import SpeakerWebSocketHandler
+    from jupyterlab_audio_extension.routes import SpeakerWebSocketHandler
 
     # The test server refuses anonymous requests server-wide; the decorator keeps the
     # endpoint authenticated on a server that allows them.
     assert getattr(SpeakerWebSocketHandler.get, "__allow_unauthenticated", True) is False
     with pytest.raises(tornado.httpclient.HTTPClientError) as refused:
         await jp_ws_fetch(
-            "jupyterlab-voice-capture-extension", "speaker", headers={"Authorization": ""}
+            "jupyterlab-audio-extension", "speaker", headers={"Authorization": ""}
         )
     assert refused.value.code == 403
 
@@ -238,7 +240,7 @@ async def test_speaker_without_a_token_is_refused(jp_ws_fetch):
 async def test_speaker_pcm_arrives_verbatim_in_whole_frames(jp_ws_fetch, speaker_path):
     wfd = _pipe_sink(speaker_path)
     try:
-        ws = await jp_ws_fetch("jupyterlab-voice-capture-extension", "speaker")
+        ws = await jp_ws_fetch("jupyterlab-audio-extension", "speaker")
         data = bytes(range(256)) * 16
         # 37-byte writes split sample frames across reads; the reader must rejoin them.
         for i in range(0, len(data), 37):
@@ -258,7 +260,7 @@ async def test_speaker_audio_from_before_a_tab_connected_is_discarded(jp_ws_fetc
     try:
         os.write(wfd, b"\xaa" * 4000)
         await asyncio.sleep(0.6)  # the reader opens the FIFO within 0.2 s
-        ws = await jp_ws_fetch("jupyterlab-voice-capture-extension", "speaker")
+        ws = await jp_ws_fetch("jupyterlab-audio-extension", "speaker")
         os.write(wfd, b"\x01" * 4000)
         received = b"".join(await _receive(ws, 4000))
         ws.close()
@@ -271,8 +273,8 @@ async def test_speaker_audio_from_before_a_tab_connected_is_discarded(jp_ws_fetc
 async def test_two_speaker_listeners_both_receive_the_same_bytes(jp_ws_fetch, speaker_path):
     wfd = _pipe_sink(speaker_path)
     try:
-        first = await jp_ws_fetch("jupyterlab-voice-capture-extension", "speaker")
-        second = await jp_ws_fetch("jupyterlab-voice-capture-extension", "speaker")
+        first = await jp_ws_fetch("jupyterlab-audio-extension", "speaker")
+        second = await jp_ws_fetch("jupyterlab-audio-extension", "speaker")
         data = bytes(range(256)) * 16
         os.write(wfd, data)
         assert b"".join(await _receive(first, len(data))) == data
@@ -285,12 +287,12 @@ async def test_two_speaker_listeners_both_receive_the_same_bytes(jp_ws_fetch, sp
 
 
 async def test_producer_and_listener_do_not_close_each_other(jp_ws_fetch):
-    stream = await jp_ws_fetch("jupyterlab-voice-capture-extension", "stream")
-    speaker = await jp_ws_fetch("jupyterlab-voice-capture-extension", "speaker")
+    stream = await jp_ws_fetch("jupyterlab-audio-extension", "stream")
+    speaker = await jp_ws_fetch("jupyterlab-audio-extension", "speaker")
     await asyncio.sleep(0.3)
     assert stream.close_code is None  # a listener does not take the producer slot
 
-    stream2 = await jp_ws_fetch("jupyterlab-voice-capture-extension", "stream")
+    stream2 = await jp_ws_fetch("jupyterlab-audio-extension", "stream")
     await asyncio.sleep(0.3)
     assert speaker.close_code is None  # a producer does not close a listener
     for ws in (stream, speaker, stream2):
@@ -300,7 +302,7 @@ async def test_producer_and_listener_do_not_close_each_other(jp_ws_fetch):
 async def test_regular_file_at_speaker_path_is_never_read(jp_ws_fetch, speaker_path):
     with open(speaker_path, "wb") as handle:
         handle.write(b"\xaa" * 4000)
-    ws = await jp_ws_fetch("jupyterlab-voice-capture-extension", "speaker")
+    ws = await jp_ws_fetch("jupyterlab-audio-extension", "speaker")
     with pytest.raises(TimeoutError):
         await asyncio.wait_for(ws.read_message(), 1)
     ws.close()
@@ -308,7 +310,7 @@ async def test_regular_file_at_speaker_path_is_never_read(jp_ws_fetch, speaker_p
 
 async def test_speaker_reader_recovers_after_the_writer_closes(jp_ws_fetch, speaker_path):
     wfd = _pipe_sink(speaker_path)
-    ws = await jp_ws_fetch("jupyterlab-voice-capture-extension", "speaker")
+    ws = await jp_ws_fetch("jupyterlab-audio-extension", "speaker")
     os.write(wfd, b"\x01" * 400)
     assert b"".join(await _receive(ws, 400)) == b"\x01" * 400
 
@@ -327,7 +329,7 @@ async def test_speaker_reader_recovers_after_the_writer_closes(jp_ws_fetch, spea
 def test_speaker_drops_data_while_half_a_second_waits_unsent():
     import concurrent.futures
 
-    from jupyterlab_voice_capture_extension.routes import SpeakerWebSocketHandler
+    from jupyterlab_audio_extension.routes import SpeakerWebSocketHandler
 
     handler = SpeakerWebSocketHandler.__new__(SpeakerWebSocketHandler)
     handler._pending = 0
@@ -350,7 +352,7 @@ def test_speaker_drops_data_while_half_a_second_waits_unsent():
 def test_a_slow_speaker_listener_does_not_drop_data_for_another():
     import concurrent.futures
 
-    from jupyterlab_voice_capture_extension.routes import SpeakerWebSocketHandler
+    from jupyterlab_audio_extension.routes import SpeakerWebSocketHandler
 
     def listener(futures, finish):
         handler = SpeakerWebSocketHandler.__new__(SpeakerWebSocketHandler)
@@ -379,7 +381,7 @@ def test_a_slow_speaker_listener_does_not_drop_data_for_another():
 
 # -- player route ----------------------------------------------------------------------
 
-PLAYER = ("jupyterlab-voice-capture-extension", "player")
+PLAYER = ("jupyterlab-audio-extension", "player")
 EMPTY_PLAYER = {"paused": False, "stopped": False, "playing": [], "queue": []}
 
 
@@ -455,7 +457,7 @@ async def test_player_status_lets_a_stop_marker_win_over_a_stale_speaker_fifo(
     jp_fetch, speaker_path
 ):
     # ACC-PLAYER-80: a killed daemon can leave its FIFO behind; the stop marker still reads off.
-    from jupyterlab_voice_capture_extension.speaker import STOP_MARKER_NAME
+    from jupyterlab_audio_extension.speaker import STOP_MARKER_NAME
 
     os.mkfifo(speaker_path)
     with open(os.path.join(os.path.dirname(speaker_path), STOP_MARKER_NAME), "w"):
@@ -525,7 +527,7 @@ def _player_pids(root):
         if (
             argv
             and argv[0].endswith(b"paplay")
-            and b"--client-name=voice-capture-player" in argv
+            and b"--client-name=audio-player" in argv
             and any(argument.startswith(marker) for argument in argv)
         ):
             pids.append(int(entry))
@@ -552,7 +554,7 @@ async def test_a_second_load_stops_the_previous_players_paplay(
 
 # -- reload and unload -----------------------------------------------------------------
 
-PACKAGE = "jupyterlab_voice_capture_extension"
+PACKAGE = "jupyterlab_audio_extension"
 
 
 @pytest.fixture
@@ -604,9 +606,9 @@ async def test_a_second_load_replaces_the_sink_and_the_speaker_reader(
     jp_serverapp, jp_ws_fetch, soft_reload, voice_sink_path, speaker_path
 ):
     settings = jp_serverapp.web_app.settings
-    first_sink, first_reader = settings["voice_capture_sink"], settings["voice_capture_speaker"]
+    first_sink, first_reader = settings["audio_capture_sink"], settings["audio_capture_speaker"]
     # Earlier tests' servers leave their threads running, so count against this server's start.
-    names = ("voice-capture-fifo-writer", "voice-capture-speaker-reader")
+    names = ("audio-fifo-writer", "audio-speaker-reader")
     counts = [_alive(name) for name in names]
     await soft_reload()
 
@@ -616,8 +618,8 @@ async def test_a_second_load_replaces_the_sink_and_the_speaker_reader(
     rfd = os.open(voice_sink_path, os.O_RDONLY | os.O_NONBLOCK)
     wfd = _pipe_sink(speaker_path)
     try:
-        stream = await jp_ws_fetch("jupyterlab-voice-capture-extension", "stream")
-        speaker = await jp_ws_fetch("jupyterlab-voice-capture-extension", "speaker")
+        stream = await jp_ws_fetch("jupyterlab-audio-extension", "stream")
+        speaker = await jp_ws_fetch("jupyterlab-audio-extension", "speaker")
         await stream.write_message(b"\x01\x02" * 320, binary=True)
         assert await _read_at_least(rfd, 640) == b"\x01\x02" * 320
         os.write(wfd, b"\x03" * 400)
@@ -632,20 +634,20 @@ async def test_a_second_load_replaces_the_sink_and_the_speaker_reader(
 async def test_a_second_load_closes_open_sockets_so_tabs_reconnect(
     jp_serverapp, jp_ws_fetch, soft_reload
 ):
-    stream = await jp_ws_fetch("jupyterlab-voice-capture-extension", "stream")
-    speaker = await jp_ws_fetch("jupyterlab-voice-capture-extension", "speaker")
+    stream = await jp_ws_fetch("jupyterlab-audio-extension", "stream")
+    speaker = await jp_ws_fetch("jupyterlab-audio-extension", "speaker")
     await soft_reload()
 
     for ws in (stream, speaker):
         assert await asyncio.wait_for(ws.read_message(), 5) is None
         assert ws.close_code == 1001  # the frontend reconnects on it, not on 4001
 
-    stream = await jp_ws_fetch("jupyterlab-voice-capture-extension", "stream")
-    speaker = await jp_ws_fetch("jupyterlab-voice-capture-extension", "speaker")
+    stream = await jp_ws_fetch("jupyterlab-audio-extension", "stream")
+    speaker = await jp_ws_fetch("jupyterlab-audio-extension", "speaker")
     routes = sys.modules[PACKAGE + ".routes"]  # the second load's module
     connections = jp_serverapp.web_app.settings[routes.CONNECTIONS_KEY]
     assert {type(connection) for connection in connections} == {
-        routes.VoiceCaptureWebSocketHandler,
+        routes.AudioCaptureWebSocketHandler,
         routes.SpeakerWebSocketHandler,
     }
     stream.close()
@@ -654,15 +656,17 @@ async def test_a_second_load_closes_open_sockets_so_tabs_reconnect(
 
 async def test_a_load_after_1_0_18_closes_its_sink(jp_serverapp, soft_reload):
     settings = jp_serverapp.web_app.settings
-    settings.pop("voice_capture_speaker").close()
-    del settings["voice_capture_connections"]
-    # What 1.0.18 left in the settings: only its FifoSink, whose sink.py is this package's.
+    settings.pop("audio_capture_speaker").close()
+    del settings["audio_capture_connections"]
+    # What 1.0.18 left in the settings: only its FifoSink, under the old key and with the
+    # sink.py of this package.
+    settings["voice_capture_sink"] = settings.pop("audio_capture_sink")
     old_sink = settings["voice_capture_sink"]
     await soft_reload()
 
     assert not old_sink._thread.is_alive()
-    assert settings["voice_capture_sink"]._thread.is_alive()
-    assert settings["voice_capture_speaker"]._thread.is_alive()
+    assert settings["audio_capture_sink"]._thread.is_alive()
+    assert settings["audio_capture_speaker"]._thread.is_alive()
 
 
 def _handler_classes(web_app):
@@ -676,13 +680,25 @@ def _handler_classes(web_app):
     ]
 
 
+def _rules_under(web_app, prefix):
+    """Every route rule in both routers whose path starts with prefix."""
+    return [
+        rule
+        for router in (web_app.default_router, web_app.wildcard_router)
+        for host_rule in router.rules
+        for rule in getattr(host_rule.target, "rules", [])
+        if isinstance(rule.matcher, PathMatches)
+        and rule.matcher.regex.pattern.startswith(prefix)
+    ]
+
+
 async def test_a_second_load_replaces_the_player(jp_serverapp, soft_reload):
     # ACC-PLAYER-62: one player per server process; the load hook stops and replaces it.
     settings = jp_serverapp.web_app.settings
-    first = settings["voice_capture_player"]
+    first = settings["audio_capture_player"]
     await soft_reload()
 
-    player = settings["voice_capture_player"]
+    player = settings["audio_capture_player"]
     assert player is not first
     assert player.status() == EMPTY_PLAYER
 
@@ -694,7 +710,7 @@ async def test_a_second_load_removes_the_previous_routes(jp_serverapp, soft_relo
 
     routes = sys.modules[PACKAGE + ".routes"]
     assert _handler_classes(web_app) == [
-        routes.VoiceCaptureWebSocketHandler,
+        routes.AudioCaptureWebSocketHandler,
         routes.SpeakerWebSocketHandler,
         routes.PlayerHandler,
     ]
@@ -703,34 +719,52 @@ async def test_a_second_load_removes_the_previous_routes(jp_serverapp, soft_relo
 async def test_a_load_after_1_0_18_closes_its_producer_so_the_tab_reconnects(
     jp_serverapp, jp_ws_fetch, soft_reload
 ):
-    settings = jp_serverapp.web_app.settings
+    web_app = jp_serverapp.web_app
+    settings = web_app.settings
+    routes = sys.modules[PACKAGE + ".routes"]
+    old_prefix = url_path_join(
+        web_app.settings["base_url"], "jupyterlab-voice-capture-extension"
+    )
+    # 1.0.18 registered its routes under the old prefix and held its producer only in the
+    # handler class attribute _active; its settings kept only the sink, under the old key.
+    web_app.add_handlers(
+        ".*$",
+        [
+            (
+                url_path_join(old_prefix, "stream"),
+                routes.AudioCaptureWebSocketHandler,
+                {"sink": settings["audio_capture_sink"]},
+            )
+        ],
+    )
     stream = await jp_ws_fetch("jupyterlab-voice-capture-extension", "stream")
-    settings.pop("voice_capture_speaker").close()
-    del settings["voice_capture_connections"]
-    # 1.0.18 holds its producer only in the handler class attribute _active.
+    settings.pop("audio_capture_speaker").close()
+    del settings["audio_capture_connections"]
+    settings["voice_capture_sink"] = settings.pop("audio_capture_sink")
     await soft_reload()
 
     assert await asyncio.wait_for(stream.read_message(), 5) is None
     assert stream.close_code == 1001
-    stream = await jp_ws_fetch("jupyterlab-voice-capture-extension", "stream")
+    assert _rules_under(web_app, old_prefix + "/") == []
+    stream = await jp_ws_fetch("jupyterlab-audio-extension", "stream")
     routes = sys.modules[PACKAGE + ".routes"]
-    assert routes.VoiceCaptureWebSocketHandler._active is not None
+    assert routes.AudioCaptureWebSocketHandler._active is not None
     stream.close()
 
 
 async def test_unload_stops_both_threads_and_releases_connections_and_fifos(
     jp_serverapp, jp_ws_fetch, voice_sink_path, speaker_path
 ):
-    from jupyterlab_voice_capture_extension import _unload_jupyter_server_extension
+    from jupyterlab_audio_extension import _unload_jupyter_server_extension
 
     settings = jp_serverapp.web_app.settings
-    sink, reader = settings["voice_capture_sink"], settings["voice_capture_speaker"]
+    sink, reader = settings["audio_capture_sink"], settings["audio_capture_speaker"]
     os.mkfifo(voice_sink_path)
     rfd = os.open(voice_sink_path, os.O_RDONLY | os.O_NONBLOCK)
     wfd = _pipe_sink(speaker_path)
     try:
-        stream = await jp_ws_fetch("jupyterlab-voice-capture-extension", "stream")
-        speaker = await jp_ws_fetch("jupyterlab-voice-capture-extension", "speaker")
+        stream = await jp_ws_fetch("jupyterlab-audio-extension", "stream")
+        speaker = await jp_ws_fetch("jupyterlab-audio-extension", "speaker")
         await stream.write_message(b"\x01" * 640, binary=True)
         assert len(await _read_at_least(rfd, 640)) == 640
         os.write(wfd, b"\x02" * 400)

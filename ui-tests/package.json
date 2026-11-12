@@ -1,7 +1,7 @@
 {
-  "name": "@stellarshenson/jupyterlab-voice-capture-extension-ui-tests",
+  "name": "@stellarshenson/jupyterlab-audio-extension-ui-tests",
   "version": "1.0.0",
-  "description": "JupyterLab @stellarshenson/jupyterlab-voice-capture-extension Integration Tests",
+  "description": "JupyterLab @stellarshenson/jupyterlab-audio-extension Integration Tests",
   "private": true,
   "scripts": {
     "start": "jupyter lab --config jupyter_server_test_config.py",

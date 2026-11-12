@@ -2,7 +2,7 @@ import { ServerConnection } from '@jupyterlab/services';
 
 import { ISignal, Signal } from '@lumino/signaling';
 
-import { voiceCaptureWsUrl } from './request';
+import { audioCaptureWsUrl } from './request';
 
 import { WORKLET_PROCESSOR_NAME, workletModuleUrl } from './worklet';
 
@@ -14,7 +14,7 @@ import { WORKLET_PROCESSOR_NAME, workletModuleUrl } from './worklet';
  * turned capture off, or an endpoint still unreachable after 10 s while capture stays on
  * and keeps retrying. `error` carries a human-readable message.
  */
-export type VoiceCaptureState = 'idle' | 'connecting' | 'streaming' | 'error';
+export type AudioCaptureState = 'idle' | 'connecting' | 'streaming' | 'error';
 
 export const BASE_BACKOFF_MS = 500;
 export const MAX_BACKOFF_MS = 10000;
@@ -29,14 +29,14 @@ const SUPERSEDED_CLOSE_CODE = 4001;
  * Owns the browser capture pipeline and its lifecycle: getUserMedia, the 16 kHz
  * AudioContext + worklet, the websocket to the server bridge, reconnect, and teardown.
  */
-export class VoiceCapture {
+export class AudioCapture {
   constructor(serverSettings: ServerConnection.ISettings) {
     this._serverSettings = serverSettings;
     this._unloadHandler = () => this.disable();
     window.addEventListener('beforeunload', this._unloadHandler);
   }
 
-  get state(): VoiceCaptureState {
+  get state(): AudioCaptureState {
     return this._state;
   }
 
@@ -49,7 +49,7 @@ export class VoiceCapture {
     return this._enabled;
   }
 
-  get stateChanged(): ISignal<this, VoiceCaptureState> {
+  get stateChanged(): ISignal<this, AudioCaptureState> {
     return this._stateChanged;
   }
 
@@ -189,7 +189,7 @@ export class VoiceCapture {
     this._armConnectDeadline();
     let ws: WebSocket;
     try {
-      ws = new WebSocket(voiceCaptureWsUrl(this._serverSettings));
+      ws = new WebSocket(audioCaptureWsUrl(this._serverSettings));
     } catch {
       this._scheduleReconnect();
       return;
@@ -228,7 +228,7 @@ export class VoiceCapture {
       // Still not connected after the window -> show Error, but keep retrying.
       if (this._enabled && this._state !== 'streaming') {
         this._setError(
-          'Voice-capture endpoint unreachable - retrying with the microphone on. Click to stop.'
+          'Audio-capture endpoint unreachable - retrying with the microphone on. Click to stop.'
         );
       }
     }, CONNECT_TIMEOUT_MS);
@@ -296,7 +296,7 @@ export class VoiceCapture {
     this._setState('error', message);
   }
 
-  private _setState(state: VoiceCaptureState, message: string): void {
+  private _setState(state: AudioCaptureState, message: string): void {
     this._state = state;
     this._message = message;
     this._stateChanged.emit(state);
@@ -304,9 +304,9 @@ export class VoiceCapture {
 
   private readonly _serverSettings: ServerConnection.ISettings;
   private readonly _unloadHandler: () => void;
-  private readonly _stateChanged = new Signal<this, VoiceCaptureState>(this);
+  private readonly _stateChanged = new Signal<this, AudioCaptureState>(this);
 
-  private _state: VoiceCaptureState = 'idle';
+  private _state: AudioCaptureState = 'idle';
   private _message = '';
   private _enabled = false;
   private _epoch = 0;

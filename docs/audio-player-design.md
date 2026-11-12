@@ -1,4 +1,4 @@
-# Stellars JupyterLab Voice Capture - Virtual Player v1
+# Stellars JupyterLab Audio Capture - Virtual Player v1
 
 Status: built, 2026-11-09.
 
@@ -17,7 +17,7 @@ Status: built, 2026-11-09.
 
 ## 1. Overview
 
-The server holds one player in memory, and one JupyterLab command drives it. The command `voice-capture:player` takes an `action` argument and covers every operation: play, play now, pause, resume, stop, clear and status. The player replaces the two commands `voice-capture:play-file` and `voice-capture:stop-playback`.
+The server holds one player in memory, and one JupyterLab command drives it. The command `audio:player` takes an `action` argument and covers every operation: play, play now, pause, resume, stop, clear and status. The player replaces the two earlier commands `play-file` and `stop-playback`.
 
 Playback keeps its current path to the browser. Each playing file is one `paplay` process on the container audio; PulseAudio mixes concurrent processes; the speaker chain carries that audio to every open JupyterLab tab. The player adds ordering, mixing and control on top of a path the lab already proves.
 
@@ -25,7 +25,7 @@ The player is a build of these registered criteria: `ACC-PLAYER-50` to `ACC-PLAY
 
 ## 2. Command contract
 
-The command has one id and one object argument. The agent path is `jupyterlab-commands execute voice-capture:player --args '<json>'`; the palette runs the same command.
+The command has one id and one object argument. The agent path is `jupyterlab-commands execute audio:player --args '<json>'`; the palette runs the same command.
 
 ### 2.1 Arguments
 
@@ -64,13 +64,13 @@ An unknown action, a missing `path` on `play`, a path outside the Jupyter root, 
 }
 ```
 
-`playing` lists the files that are playing or paused, in start order; a paused record stays in it with its position frozen. `queue` lists the files that wait, in play order. `position_s` is the seconds played since the file started, minus the time spent paused. `paused` is true while a record is paused and none is playing, and `stopped` is the gate that `stop` sets. `sink` is `{"state": "ready" | "off" | "missing"}`: `ready` when the speaker FIFO exists and is a FIFO, `off` when a `.stopped` marker sits beside it (`jupyterlab_voice_capture stop` writes it), and `missing` when the path is absent or not a FIFO.
+`playing` lists the files that are playing or paused, in start order; a paused record stays in it with its position frozen. `queue` lists the files that wait, in play order. `position_s` is the seconds played since the file started, minus the time spent paused. `paused` is true while a record is paused and none is playing, and `stopped` is the gate that `stop` sets. `sink` is `{"state": "ready" | "off" | "missing"}`: `ready` when the speaker FIFO exists and is a FIFO, `off` when a `.stopped` marker sits beside it (`jupyterlab_audio stop` writes it), and `missing` when the path is absent or not a FIFO.
 
 ### 2.3 Route and palette entry
 
-The command posts `{action, mode?, path?}` to `…/jupyterlab-voice-capture-extension/player` with `ServerConnection.makeRequest`, and returns the JSON state. The handler is authenticated with the Jupyter token and answers 400 with `{"message": …}` that names the problem for a refused request. It is registered beside the two websocket routes.
+The command posts `{action, mode?, path?}` to `…/jupyterlab-audio-extension/player` with `ServerConnection.makeRequest`, and returns the JSON state. The handler is authenticated with the Jupyter token and answers 400 with `{"message": …}` that names the problem for a refused request. It is registered beside the two websocket routes.
 
-One palette entry, **Stop All Audio** in category **Voice Capture**, adds the command with `{action: "stop"}`. The command's `label` function returns `Stop All Audio` for that action and `Audio Player` otherwise. The palette resolves a label function with the item's args (`@lumino/widgets` `CommandPalette` calls `commands.label(command, args)`), so no alias command is registered; the relay reads the label with no args and gets `Audio Player`.
+One palette entry, **Stop All Audio** in category **Audio**, adds the command with `{action: "stop"}`. The command's `label` function returns `Stop All Audio` for that action and `Audio Player` otherwise. The palette resolves a label function with the item's args (`@lumino/widgets` `CommandPalette` calls `commands.label(command, args)`), so no alias command is registered; the relay reads the label with no args and gets `Audio Player`.
 
 ## 3. Player state
 
@@ -100,17 +100,17 @@ The player starts the next queued record when the last playing record ends or fa
 
 One `paplay` process per playing file. The engine holds the processes and their control signals.
 
-| Operation      | Mechanism                                                                                                              |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| Start          | `paplay --client-name=voice-capture-player --latency-msec=200 <absolute path>`, stderr captured for the failure record |
-| Mix            | PulseAudio sums every concurrent client; no mixing code exists in the extension                                        |
-| Pause          | `SIGSTOP` to every playing process                                                                                     |
-| Resume         | `SIGCONT` to every paused process                                                                                      |
-| Stop           | `SIGCONT` to a paused process, then `SIGTERM`, then `SIGKILL` after 2 s if the process is still alive                  |
-| Position       | Wall clock since start, minus the summed paused spans; `paplay` offers no seek, so position is reported and not set    |
-| Decode failure | A nonzero exit names the file and the last stderr line in the response and in the server log                           |
+| Operation      | Mechanism                                                                                                           |
+| -------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Start          | `paplay --client-name=audio-player --latency-msec=200 <absolute path>`, stderr captured for the failure record      |
+| Mix            | PulseAudio sums every concurrent client; no mixing code exists in the extension                                     |
+| Pause          | `SIGSTOP` to every playing process                                                                                  |
+| Resume         | `SIGCONT` to every paused process                                                                                   |
+| Stop           | `SIGCONT` to a paused process, then `SIGTERM`, then `SIGKILL` after 2 s if the process is still alive               |
+| Position       | Wall clock since start, minus the summed paused spans; `paplay` offers no seek, so position is reported and not set |
+| Decode failure | A nonzero exit names the file and the last stderr line in the response and in the server log                        |
 
-Transport to the tabs is unchanged: `module-pipe-sink voiceout` → `/run/voice/speaker.fifo` → `SpeakerReader` → `/jupyterlab-voice-capture-extension/speaker` → AudioWorklet in every tab. No new websocket and no new audio path.
+Transport to the tabs is unchanged: `module-pipe-sink voiceout` → `/run/voice/speaker.fifo` → `SpeakerReader` → `/jupyterlab-audio-extension/speaker` → AudioWorklet in every tab. No new websocket and no new audio path.
 
 The server process starts the player processes. The extension therefore starts a playback client, and the boundary in section 6 is amended to say so.
 
@@ -138,8 +138,8 @@ The amended criterion keeps every exclusion and adds the permission: the extensi
 
 Consequences to carry in the same change:
 
-- `voice-capture:play-file` and `voice-capture:stop-playback` are removed from the command table, the agent skill, the README and the guide
-- the commands extension default allowlist carries `voice-capture:player` in place of those two ids, and its `list` output carries the command's caption as the description
+- the earlier `play-file` and `stop-playback` commands are removed from the command table, the agent skill, the README and the guide
+- the commands extension default allowlist carries `audio:player` in place of those two ids, and its `list` output carries the command's caption as the description
 - the commands extension is released after the change
 
 ## 7. Open decisions

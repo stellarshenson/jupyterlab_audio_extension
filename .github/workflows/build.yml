@@ -42,12 +42,12 @@ jobs:
         set -eux
         python -m pip install .[test]
 
-        pytest -vv -r ap --cov jupyterlab_voice_capture_extension
+        pytest -vv -r ap --cov jupyterlab_audio_extension
         jupyter server extension list
-        jupyter server extension list 2>&1 | grep -ie "jupyterlab_voice_capture_extension.*OK"
+        jupyter server extension list 2>&1 | grep -ie "jupyterlab_audio_extension.*OK"
 
         jupyter labextension list
-        jupyter labextension list 2>&1 | grep -ie "@stellarshenson/jupyterlab-voice-capture-extension.*OK"
+        jupyter labextension list 2>&1 | grep -ie "@stellarshenson/jupyterlab-audio-extension.*OK"
         python -m jupyterlab.browser_check
 
     - name: Check that all endpoints are authenticated
@@ -61,13 +61,13 @@ jobs:
 
         pip install build
         python -m build
-        pip uninstall -y "jupyterlab_voice_capture_extension" jupyterlab
+        pip uninstall -y "jupyterlab_audio_extension" jupyterlab
 
     - name: Upload extension packages
       uses: actions/upload-artifact@v4
       with:
         name: extension-artifacts
-        path: dist/jupyterlab_voice_capture_extension*
+        path: dist/jupyterlab_audio_extension*
         if-no-files-found: error
 
   test_isolated:
@@ -90,14 +90,14 @@ jobs:
         sudo rm -rf $(which node)
         sudo rm -rf $(which node)
 
-        pip install "jupyterlab>=4.6,<5" jupyterlab_voice_capture_extension*.whl
+        pip install "jupyterlab>=4.6,<5" jupyterlab_audio_extension*.whl
 
 
         jupyter server extension list
-        jupyter server extension list 2>&1 | grep -ie "jupyterlab_voice_capture_extension.*OK"
+        jupyter server extension list 2>&1 | grep -ie "jupyterlab_audio_extension.*OK"
 
         jupyter labextension list
-        jupyter labextension list 2>&1 | grep -ie "@stellarshenson/jupyterlab-voice-capture-extension.*OK"
+        jupyter labextension list 2>&1 | grep -ie "@stellarshenson/jupyterlab-audio-extension.*OK"
         python -m jupyterlab.browser_check --no-browser-test
 
   integration-tests:
@@ -125,7 +125,7 @@ jobs:
     - name: Install the extension
       run: |
         set -eux
-        python -m pip install "jupyterlab>=4.6,<5" jupyterlab_voice_capture_extension*.whl
+        python -m pip install "jupyterlab>=4.6,<5" jupyterlab_audio_extension*.whl
 
     - name: Install dependencies
       working-directory: ui-tests
@@ -156,7 +156,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: jupyterlab_voice_capture_extension-playwright-tests
+        name: jupyterlab_audio_extension-playwright-tests
         path: |
           ui-tests/test-results
           ui-tests/playwright-report

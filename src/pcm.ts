@@ -1,7 +1,7 @@
 /**
  * Pure PCM helpers shared by the audio worklet and the unit tests.
  *
- * The wire contract (see docs/acc-crit-voice-capture.md): signed 16-bit little-endian,
+ * The wire contract (see docs/acc-crit-audio.md): signed 16-bit little-endian,
  * 16 kHz, mono; one frame = 20 ms of audio = 320 samples = 640 bytes.
  */
 

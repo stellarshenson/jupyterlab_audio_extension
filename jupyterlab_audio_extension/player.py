@@ -11,7 +11,7 @@ import threading
 import time
 
 # Client name and buffer latency for every paplay process; the lab's paplay supports both.
-CLIENT_NAME = "voice-capture-player"
+CLIENT_NAME = "audio-player"
 LATENCY_MS = 200
 # A paplay that exits this soon after start is a refusal, not a playback: play() waits on
 # the process this long so the caller gets its stderr instead of a failed record.
@@ -206,7 +206,7 @@ class Player:
         record.thread = threading.Thread(
             target=self._monitor,
             args=(record,),
-            name="voice-capture-player-monitor",
+            name="audio-player-monitor",
             daemon=True,
         )
         record.thread.start()
@@ -246,7 +246,7 @@ class Player:
                 record.error = _last_stderr_line(record.process)
                 if self._log is not None:
                     self._log.warning(
-                        "voice-capture player: %s failed (%s): %s",
+                        "audio-capture player: %s failed (%s): %s",
                         record.path,
                         returncode,
                         record.error,

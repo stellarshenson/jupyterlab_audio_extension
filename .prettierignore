@@ -3,7 +3,7 @@ node_modules
 **/lib
 **/package.json
 !/package.json
-jupyterlab_voice_capture_extension
+jupyterlab_audio_extension
 eslint.config.mjs
 .venv
 .claude

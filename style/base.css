@@ -5,37 +5,43 @@
 */
 
 /* One status-bar pill: lamp, microphone, play/stop and pause between hairline dividers. */
-.jp-VoiceCapture-status.jp-VoiceCapture-pill {
+.jp-Audio-status.jp-Audio-pill {
+  --vc-pill-fill: color-mix(
+    in srgb,
+    var(--jp-layout-color1) 50%,
+    var(--jp-layout-color2)
+  );
+
   display: flex;
   align-items: center;
   gap: 1px;
   box-sizing: border-box;
   height: 20px;
   padding: 0;
-  border: 1px solid var(--jp-border-color2);
+  border: 1px solid var(--vc-pill-fill);
   border-radius: 4px;
-  background: none;
+  background: var(--vc-pill-fill);
   cursor: default;
   color: var(--jp-ui-font-color2);
 }
 
-.jp-VoiceCapture-divider {
+.jp-Audio-divider {
   width: 1px;
   height: 11px;
-  background: var(--jp-border-color2);
+  background: var(--jp-border-color0);
 }
 
-.jp-VoiceCapture-icon {
+.jp-Audio-icon {
   display: flex;
   align-items: center;
 }
 
-.jp-VoiceCapture-status svg {
+.jp-Audio-status svg {
   width: 15px;
   height: 15px;
 }
 
-.jp-VoiceCapture-control {
+.jp-Audio-control {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -51,23 +57,52 @@
 }
 
 /* The idle microphone uses the disabled control grey (ACC-CTRL-75). */
-.jp-VoiceCapture-mic {
+.jp-Audio-mic {
   color: var(--jp-ui-font-color2);
 }
 
 /* Flat: an enabled control is its glyph colour alone (ACC-CTRL-74). */
-.jp-VoiceCapture-control:hover,
-.jp-VoiceCapture-control:active {
+.jp-Audio-control:hover,
+.jp-Audio-control:active {
   background: none;
 }
 
-.jp-VoiceCapture-control:disabled {
+.jp-Audio-control:disabled {
   color: var(--jp-ui-font-color2);
   cursor: default;
 }
 
+/* A nonfunctional audio system marks the controls: a chip-coloured cutout under a slash. */
+.jp-Audio-status[data-vc-lamp='off'] .jp-Audio-control {
+  position: relative;
+}
+
+.jp-Audio-status[data-vc-lamp='off'] .jp-Audio-control::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 22px;
+  height: 5px;
+  background: var(--vc-pill-fill);
+  transform: translate(-50%, -50%) rotate(-45deg);
+  pointer-events: none;
+}
+
+.jp-Audio-status[data-vc-lamp='off'] .jp-Audio-control::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 22px;
+  height: 1.5px;
+  background: currentcolor;
+  transform: translate(-50%, -50%) rotate(-45deg);
+  pointer-events: none;
+}
+
 /* The audio-system lamp leads the pill: a 6 px disc, filled passive grey when ready. */
-.jp-VoiceCapture-lamp {
+.jp-Audio-lamp {
   flex: none;
   width: 6px;
   height: 6px;
@@ -76,65 +111,65 @@
   background: #93a0aa;
 }
 
-.jp-VoiceCapture-lamp[data-vc-lamp='off'] {
+.jp-Audio-lamp[data-vc-lamp='off'] {
   background: transparent;
   box-shadow: inset 0 0 0 1px #93a0aa;
 }
 
-.jp-VoiceCapture-lamp[data-vc-lamp='active'] {
-  background: #78a884;
+.jp-Audio-lamp[data-vc-lamp='active'] {
+  background: #6dbd81;
 }
 
-[data-jp-theme-light='true'] .jp-VoiceCapture-lamp {
+[data-jp-theme-light='true'] .jp-Audio-lamp {
   background: #4a535b;
 }
 
-[data-jp-theme-light='true'] .jp-VoiceCapture-lamp[data-vc-lamp='off'] {
+[data-jp-theme-light='true'] .jp-Audio-lamp[data-vc-lamp='off'] {
   background: transparent;
   box-shadow: inset 0 0 0 1px #4a535b;
 }
 
-[data-jp-theme-light='true'] .jp-VoiceCapture-lamp[data-vc-lamp='active'] {
-  background: #3a5d42;
+[data-jp-theme-light='true'] .jp-Audio-lamp[data-vc-lamp='active'] {
+  background: #347443;
 }
 
 /* The fault rule comes last so the amber wins over the theme overrides (ACC-CTRL-72). */
-.jp-VoiceCapture-lamp[data-vc-lamp='fault'] {
+.jp-Audio-lamp[data-vc-lamp='fault'] {
   background: var(--jp-warn-color0);
-  animation: vc-blink 1s steps(1, end) infinite;
+  animation: audio-blink 1s steps(1, end) infinite;
 }
 
 /*
   The microphone segment shares the control palette (ACC-CTRL-75); its animations are
-  scoped to its own icon. connecting: blue fade | streaming: enabled colour, no animation |
-  error: orange blink
+  scoped to its own icon. connecting: blue fade | streaming: active-lamp green, no
+  animation | error: orange blink
 */
-.jp-VoiceCapture-status.jp-mod-connecting .jp-VoiceCapture-mic {
+.jp-Audio-status.jp-mod-connecting .jp-Audio-mic {
   color: var(--jp-brand-color1);
 }
 
-.jp-VoiceCapture-status.jp-mod-streaming .jp-VoiceCapture-mic {
-  color: var(--jp-ui-font-color1);
+.jp-Audio-status.jp-mod-streaming .jp-Audio-mic {
+  color: #6dbd81;
 }
 
-.jp-VoiceCapture-status.jp-mod-error .jp-VoiceCapture-mic {
+.jp-Audio-status.jp-mod-error .jp-Audio-mic {
   color: var(--jp-warn-color1);
 }
 
-.jp-VoiceCapture-status.jp-mod-connecting
-  .jp-VoiceCapture-mic
-  .jp-VoiceCapture-icon {
-  animation: vc-fade 1.2s ease-in-out infinite;
+[data-jp-theme-light='true'] .jp-Audio-status.jp-mod-streaming .jp-Audio-mic {
+  color: #347443;
 }
 
-.jp-VoiceCapture-status.jp-mod-error
-  .jp-VoiceCapture-mic
-  .jp-VoiceCapture-icon {
-  animation: vc-blink 1s steps(1, end) infinite;
+.jp-Audio-status.jp-mod-connecting .jp-Audio-mic .jp-Audio-icon {
+  animation: audio-fade 1.2s ease-in-out infinite;
+}
+
+.jp-Audio-status.jp-mod-error .jp-Audio-mic .jp-Audio-icon {
+  animation: audio-blink 1s steps(1, end) infinite;
 }
 
 /* error: hard on/off orange blink */
-@keyframes vc-blink {
+@keyframes audio-blink {
   0%,
   50% {
     opacity: 1;
@@ -147,7 +182,7 @@
 }
 
 /* connecting: gentle fade */
-@keyframes vc-fade {
+@keyframes audio-fade {
   0%,
   100% {
     opacity: 1;

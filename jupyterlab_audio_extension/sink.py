@@ -58,11 +58,11 @@ class FifoSink:
         try:
             self._guard_path()
         except OSError as exc:
-            self._log.error("voice-capture: cannot prepare sink %s: %s", self._path, exc)
+            self._log.error("audio-capture: cannot prepare sink %s: %s", self._path, exc)
             return False
         self._enabled = True
         self._thread = threading.Thread(
-            target=self._run, name="voice-capture-fifo-writer", daemon=True
+            target=self._run, name="audio-fifo-writer", daemon=True
         )
         self._thread.start()
         return True
@@ -92,7 +92,7 @@ class FifoSink:
                 self._queue.put_nowait(data)
             except (queue.Empty, queue.Full):
                 pass
-            self._log.debug("voice-capture: sink buffer full, dropped a frame")
+            self._log.debug("audio-capture: sink buffer full, dropped a frame")
 
     def close(self):
         """Stop the writer thread and release the FIFO."""
@@ -113,7 +113,7 @@ class FifoSink:
             except BrokenPipeError:
                 pass  # reader gone (logged by _write_frame); reopen for the next reader
             except OSError as exc:
-                self._log.warning("voice-capture: sink write failed, reopening: %s", exc)
+                self._log.warning("audio-capture: sink write failed, reopening: %s", exc)
                 self._stop.wait(0.5)
             finally:
                 try:
@@ -137,7 +137,7 @@ class FifoSink:
                         self._queue.get_nowait()
                     self._stop.wait(0.2)
                     continue
-                self._log.warning("voice-capture: cannot open sink %s: %s", self._path, exc)
+                self._log.warning("audio-capture: cannot open sink %s: %s", self._path, exc)
                 self._stop.wait(0.5)
                 continue
             if stat.S_ISFIFO(os.fstat(fd).st_mode):
@@ -145,7 +145,7 @@ class FifoSink:
             os.close(fd)  # C5: a regular file opens too, but audio never goes to disk
             if not refused:
                 self._log.error(
-                    "voice-capture: sink %s is not a FIFO; refusing to write to it", self._path
+                    "audio-capture: sink %s is not a FIFO; refusing to write to it", self._path
                 )
                 refused = True
             self._stop.wait(0.5)
@@ -166,10 +166,10 @@ class FifoSink:
             try:
                 view = view[os.write(fd, view):]
             except BrokenPipeError:
-                self._log.info("voice-capture: sink reader disconnected, awaiting a new one")
+                self._log.info("audio-capture: sink reader disconnected, awaiting a new one")
                 raise  # unwind to _run so the FIFO is reopened
             except OSError as exc:
                 if exc.errno in (errno.EAGAIN, errno.EWOULDBLOCK):
-                    self._log.debug("voice-capture: sink full, dropping frame tail")
+                    self._log.debug("audio-capture: sink full, dropping frame tail")
                     return
                 raise

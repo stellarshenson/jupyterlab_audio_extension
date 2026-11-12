@@ -1,7 +1,7 @@
 """The virtual player: its state machine with a fake process, and its real paplay engine.
 
 These tests fix the interface the build implements in
-``jupyterlab_voice_capture_extension/player.py``::
+``jupyterlab_audio_extension/player.py``::
 
     Player(root_dir, log=None, spawn=None, clock=None)
     play(path, mode="queue") -> state
@@ -38,7 +38,7 @@ import wave
 
 import pytest
 
-from jupyterlab_voice_capture_extension.player import Player
+from jupyterlab_audio_extension.player import Player
 
 EMPTY_STATE = {"paused": False, "stopped": False, "playing": [], "queue": []}
 
@@ -153,7 +153,7 @@ def test_play_queues_and_starts_the_next_file_in_order(tmp_path):
 
         argv = spawn.processes[0].argv
         assert argv[0] == "paplay"
-        assert "--client-name=voice-capture-player" in argv
+        assert "--client-name=audio-player" in argv
         assert "--latency-msec=200" in argv
         assert a in argv
 

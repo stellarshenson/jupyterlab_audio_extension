@@ -1,5 +1,5 @@
 {
   "packageManager": "python",
-  "packageName": "jupyterlab_voice_capture_extension",
-  "uninstallInstructions": "Use your Python package manager (pip, conda, etc.) to uninstall the package jupyterlab_voice_capture_extension"
+  "packageName": "jupyterlab_audio_extension",
+  "uninstallInstructions": "Use your Python package manager (pip, conda, etc.) to uninstall the package jupyterlab_audio_extension"
 }

@@ -4,7 +4,7 @@ These exercise the real recorder Claude Code's /voice uses - `rec` (SoX) with
 `AUDIODRIVER=pulseaudio` - against a live PulseAudio daemon whose `module-pipe-source`
 reads the FIFO the extension writes. They are skipped whenever the audio stack is not
 present (e.g. CI), so they never break the unit-test gate; run them on a box where
-`jupyterlab_voice_capture install` has set up the bridge.
+`jupyterlab_audio install` has set up the bridge.
 """
 
 import os
@@ -89,7 +89,7 @@ def test_rec_probe_with_audiodriver_pulseaudio():
 def test_fifo_exists_where_the_source_reads_it():
     # The module-pipe-source declares a FIFO path; that file must actually exist and be a
     # FIFO - i.e. the sink was created in the place the recording side reads from. The
-    # extension's c.VoiceCapture.sink_path must point at this same path to deliver audio.
+    # extension's c.AudioCapture.sink_path must point at this same path to deliver audio.
     fifo = _pipe_source_fifo()
     assert fifo is not None, "no module-pipe-source loaded"
     assert os.path.exists(fifo), f"sink FIFO {fifo} does not exist"

@@ -2,6 +2,20 @@
 
 <!-- <START NEW CHANGELOG ENTRY> -->
 
+## [1.0.0] - 2026-11-12
+
+### Added
+
+- README section "Upgrade from 1.1.8": uninstall the old distribution, install the renamed one, restart the server, hard-reload open tabs, re-enable Auto-connect and replace `voice-capture:enable/disable/player` in the Commands Executor allowlist with `audio:enable/disable/player`
+- A saved `c.VoiceCapture.sink_path` resolves after the rename with the new key winning, `make install` removes the 1.1.8 distribution first, and a reload closes a stale 1.1.8 load's connections, sink, speaker and player and removes its route prefix
+
+### Changed
+
+- Renamed the extension to `jupyterlab_audio_extension`: the distribution and module, the CLI `jupyterlab_audio`, the labextension `@stellarshenson/jupyterlab-audio-extension`, the command ids `audio:player`, `audio:enable` and `audio:disable`, the route prefix `jupyterlab-audio-extension`, the CSS `jp-Audio-*` classes, the settings ids, the agent skill and every document
+- The status bar pill reads as a block: a 50 percent mix of the theme's layout colours with visible dividers, and its 1 px gap keeps the control targets 25 px apart
+- The streaming microphone and the active lamp share one muted green per theme, `#6dbd81` in the dark theme and `#347443` in the light theme
+- The shut-down state crosses all three icons with a chip-coloured cutout
+
 ## [1.1.8] - 2026-11-11
 
 ### Changed

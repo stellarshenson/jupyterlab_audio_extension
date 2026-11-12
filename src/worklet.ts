@@ -10,10 +10,10 @@
  * have to serve an extra static asset.
  */
 
-export const WORKLET_PROCESSOR_NAME = 'voice-capture-processor';
+export const WORKLET_PROCESSOR_NAME = 'audio-processor';
 
 const WORKLET_SOURCE = `
-class VoiceCaptureProcessor extends AudioWorkletProcessor {
+class AudioCaptureProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
     this._frameSamples = 320;
@@ -53,7 +53,7 @@ class VoiceCaptureProcessor extends AudioWorkletProcessor {
   }
 }
 
-registerProcessor('${WORKLET_PROCESSOR_NAME}', VoiceCaptureProcessor);
+registerProcessor('${WORKLET_PROCESSOR_NAME}', AudioCaptureProcessor);
 `;
 
 /**

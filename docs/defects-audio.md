@@ -1,6 +1,6 @@
-# Defects - jupyterlab_voice_capture_extension
+# Defects - jupyterlab_audio_extension
 
-Defects found in the voice-capture extension, its operator CLI and its tests. The criteria they break are in `acc-crit-voice-capture.md`.
+Defects found in the audio extension, its operator CLI and its tests. The criteria they break are in `acc-crit-audio.md`.
 
 - log: 2026-11-06T16:30:02Z @kj coded 8 item(s) from def-codes.map
 
@@ -44,16 +44,18 @@ Automated tests and the state they leave behind
 
 Server websocket handler and the FIFO sink
 
-- [x] `DEF-BRIDGE-2-READER-GONE` **Sink stops writing after the FIFO reader goes away once** - MAJOR; after the FIFO reader closes once (PulseAudio restart, jupyterlab_voice_capture stop/start), no audio reaches the FIFO again until Jupyter restarts, while the control still shows Connected; `jupyterlab_voice_capture_extension/sink.py`
+- [x] `DEF-BRIDGE-2-READER-GONE` **Sink stops writing after the FIFO reader goes away once** - MAJOR; after the FIFO reader closes once (PulseAudio restart, jupyterlab_audio stop/start), no audio reaches the FIFO again until Jupyter restarts, while the control still shows Connected; `jupyterlab_audio_extension/sink.py`
   - evidence: test_new_reader_gets_audio_after_the_old_one_left green; functional suite 8/8 on 1.0.11, each spec with a new FIFO reader
   - related: ACC-BRIDGE-11-NO-READER - a later reader must get live audio
   - repro: stream into the FIFO, stop and restart the reader, stream again; the new reader gets 0 bytes and the server log shows BrokenPipeError: [Errno 32] Broken pipe
   - test-tags: INTEGRATION, FUNCTIONAL
-  - root-cause: 2026-09-28T09:06:06Z @kj \_write_frame re-raises BrokenPipeError and \_run has try/finally with no except, so the error ends the voice-capture-fifo-writer thread; nothing drains the queue after that
+  - root-cause: 2026-11-11T23:47:42Z @kj \_write_frame re-raises BrokenPipeError and \_run has try/finally with no except, so the error ends the audio-fifo-writer thread; nothing drains the queue after that
   - log: 2026-09-28T09:06:06Z @kj added
   - log: 2026-09-28T09:16:29Z @kj closed: fixed: \_run catches BrokenPipeError and other OSError and reopens the FIFO
   - log: 2026-11-06T16:30:02Z @kj coded READER-GONE
-- [x] `DEF-BRIDGE-4-REGULAR-FILE` **Audio written into a regular file at the sink path** - MAJOR; a regular file that appears at the sink path after the server started receives the microphone audio, growing without limit; `jupyterlab_voice_capture_extension/sink.py`
+  - log: 2026-11-11T23:47:42Z @kj amended text "after the FIFO reader closes once (PulseAudio restart, jupyterlab_voice_capture stop/start), no audio reaches the FIFO again until Jupyter restarts, while the control still shows Connected; `jupyterlab_voice_capture_extension/sink.py`" -> "after the FIFO reader closes once (PulseAudio restart, jupyterlab_audio stop/start), no audio reaches the FIFO again until Jupyter restarts, while the control still shows Connected; `jupyterlab_audio_extension/sink.py`"; reason: module and CLI renamed
+  - log: 2026-11-11T23:47:42Z @kj root-cause updated "2026-09-28T09:06:06Z @kj \_write_frame re-raises BrokenPipeError and \_run has try/finally with no except, so the error ends the voice-capture-fifo-writer thread; nothing drains the queue after that" -> "\_write_frame re-raises BrokenPipeError and \_run has try/finally with no except, so the error ends the audio-fifo-writer thread; nothing drains the queue after that"; reason: thread name renamed from voice-capture-fifo-writer to audio-fifo-writer
+- [x] `DEF-BRIDGE-4-REGULAR-FILE` **Audio written into a regular file at the sink path** - MAJOR; a regular file that appears at the sink path after the server started receives the microphone audio, growing without limit; `jupyterlab_audio_extension/sink.py`
   - evidence: test_regular_file_at_sink_path_is_never_written green: file stays 0 bytes (6400 before the fix)
   - related: ACC-BRIDGE-13-NO-DISK - audio never written to a regular file
   - repro: start the server with no FIFO, create a regular file at the sink path, stream; the file grows (6400 bytes after 10 frames)
@@ -62,7 +64,8 @@ Server websocket handler and the FIFO sink
   - log: 2026-09-28T09:08:33Z @kj added
   - log: 2026-09-28T09:16:29Z @kj closed: fixed: \_open_fifo fstats the opened path and refuses a non-FIFO
   - log: 2026-11-06T16:30:02Z @kj coded REGULAR-FILE
-- [x] `DEF-BRIDGE-7-STALE-SPEECH` **Old speech plays at the start of the next /voice recording** - MAJOR; while capture is on and nothing records, the FIFO fills with up to 64 KB (2 s) of audio that PulseAudio reads first when /voice starts recording, so the recording opens with stale speech; `jupyterlab_voice_capture_extension/cli.py`
+  - log: 2026-11-11T23:47:46Z @kj amended text "a regular file that appears at the sink path after the server started receives the microphone audio, growing without limit; `jupyterlab_voice_capture_extension/sink.py`" -> "a regular file that appears at the sink path after the server started receives the microphone audio, growing without limit; `jupyterlab_audio_extension/sink.py`"; reason: module renamed
+- [x] `DEF-BRIDGE-7-STALE-SPEECH` **Old speech plays at the start of the next /voice recording** - MAJOR; while capture is on and nothing records, the FIFO fills with up to 64 KB (2 s) of audio that PulseAudio reads first when /voice starts recording, so the recording opens with stale speech; `jupyterlab_audio_extension/cli.py`
   - evidence: isolated PulseAudio 16.1 with the drain: 0 bytes waiting after 250 idle frames, a recorder attached at frame 250 first got frame 251, 0 of 250 frames dropped over ten 500 ms stalls, 0.4% CPU; test_start_keeps_voicein_reading_through_a_drain green
   - repro: turn capture on, speak, wait a minute, start /voice; the first 2 s carry the earlier speech
   - test-tags: UNIT
@@ -73,7 +76,8 @@ Server websocket handler and the FIFO sink
   - log: 2026-09-28T11:03:17Z @kj fixed: start loads a voicedrain null sink and a loopback from voicein, so the pipe-source keeps reading while nothing records
   - log: 2026-09-28T11:03:17Z @kj edited evidence "test_start_shrinks_the_fifo_buffer green: a pipe held open read-write accepts at most 8192 bytes after start (65536 before); scratch FIFO measured 7680 bytes accepted" -> "isolated PulseAudio 16.1 with the drain: 0 bytes waiting after 250 idle frames, a recorder attached at frame 250 first got frame 251, 0 of 250 frames dropped over ten 500 ms stalls, 0.4% CPU; test_start_keeps_voicein_reading_through_a_drain green"
   - log: 2026-11-06T16:30:02Z @kj coded STALE-SPEECH
-- [x] `DEF-BRIDGE-8-OLD-AUDIO` **Reader gets audio from before it attached** - MEDIUM; frames that arrive while no reader holds the FIFO stay in the sink queue (up to 256 frames, 5 s) and are written to the next reader however much later it attaches; found by Galata A1 after D4 in a --repeat-each run; `jupyterlab_voice_capture_extension/sink.py`
+  - log: 2026-11-11T23:47:46Z @kj amended text "while capture is on and nothing records, the FIFO fills with up to 64 KB (2 s) of audio that PulseAudio reads first when /voice starts recording, so the recording opens with stale speech; `jupyterlab_voice_capture_extension/cli.py`" -> "while capture is on and nothing records, the FIFO fills with up to 64 KB (2 s) of audio that PulseAudio reads first when /voice starts recording, so the recording opens with stale speech; `jupyterlab_audio_extension/cli.py`"; reason: module renamed
+- [x] `DEF-BRIDGE-8-OLD-AUDIO` **Reader gets audio from before it attached** - MEDIUM; frames that arrive while no reader holds the FIFO stay in the sink queue (up to 256 frames, 5 s) and are written to the next reader however much later it attaches; found by Galata A1 after D4 in a --repeat-each run; `jupyterlab_audio_extension/sink.py`
   - evidence: test_reader_never_gets_audio_from_before_it_attached red before the fix, green after; pytest 22/22 three runs; Galata --repeat-each 2 18/18 incl. A1 after D4
   - repro: stream with no FIFO, create the FIFO 0.6 s later and read: the old frames arrive before the live ones
   - test-tags: INTEGRATION, FUNCTIONAL
@@ -81,12 +85,13 @@ Server websocket handler and the FIFO sink
   - log: 2026-09-28T11:59:26Z @kj added
   - log: 2026-09-28T12:05:43Z @kj closed: fixed: \_open_fifo discards the queue on every poll while no reader is attached
   - log: 2026-11-06T16:30:02Z @kj coded OLD-AUDIO
+  - log: 2026-11-11T23:47:46Z @kj amended text "frames that arrive while no reader holds the FIFO stay in the sink queue (up to 256 frames, 5 s) and are written to the next reader however much later it attaches; found by Galata A1 after D4 in a --repeat-each run; `jupyterlab_voice_capture_extension/sink.py`" -> "frames that arrive while no reader holds the FIFO stay in the sink queue (up to 256 frames, 5 s) and are written to the next reader however much later it attaches; found by Galata A1 after D4 in a --repeat-each run; `jupyterlab_audio_extension/sink.py`"; reason: module renamed
 
 ## Lifecycle `LIFE`
 
 Reconnect, teardown and concurrent tabs
 
-- [x] `DEF-LIFE-3-TAKE-BACK` **First tab takes the stream back after a second tab takes over** - MAJOR; with capture on in two tabs, the first tab stays or returns to Connected after the second takes over, so both tabs keep taking the stream from each other and their audio alternates in the FIFO; `src/voice-capture.ts`
+- [x] `DEF-LIFE-3-TAKE-BACK` **First tab takes the stream back after a second tab takes over** - MAJOR; with capture on in two tabs, the first tab stays or returns to Connected after the second takes over, so both tabs keep taking the stream from each other and their audio alternates in the FIFO; `src/audio-capture.ts`
   - evidence: functional D3 green on 1.0.11: first tab idle, second tab 1 socket over 3 s; jest 'stops without reconnecting when another tab takes over (D3)' green
   - related: ACC-LIFE-16-ONE-PRODUCER - single producer
   - repro: turn capture on in tab 1, then in tab 2; 5 s later tab 1 still shows Connected
@@ -95,7 +100,8 @@ Reconnect, teardown and concurrent tabs
   - log: 2026-09-28T09:06:07Z @kj added
   - log: 2026-09-28T09:16:29Z @kj closed: fixed: server closes a replaced producer with code 4001, the tab disables capture on it
   - log: 2026-11-06T16:30:02Z @kj coded TAKE-BACK
-- [x] `DEF-LIFE-5-DOUBLE-CLICK` **A second click during Connecting leaves the microphone running** - MAJOR; clicking again while the permission prompt or audio start is pending shows Disconnected, but when getUserMedia resolves the capture pipeline starts anyway and the stream is never released; `src/voice-capture.ts`
+  - log: 2026-11-11T23:47:49Z @kj amended text "with capture on in two tabs, the first tab stays or returns to Connected after the second takes over, so both tabs keep taking the stream from each other and their audio alternates in the FIFO; `src/voice-capture.ts`" -> "with capture on in two tabs, the first tab stays or returns to Connected after the second takes over, so both tabs keep taking the stream from each other and their audio alternates in the FIFO; `src/audio-capture.ts`"; reason: frontend module renamed
+- [x] `DEF-LIFE-5-DOUBLE-CLICK` **A second click during Connecting leaves the microphone running** - MAJOR; clicking again while the permission prompt or audio start is pending shows Disconnected, but when getUserMedia resolves the capture pipeline starts anyway and the stream is never released; `src/audio-capture.ts`
   - evidence: jest 'a second click during the permission prompt releases the late stream' green on 1.0.12, red without the fix; jest 19/19; functional 9/9 twice
   - repro: click the mic, click again before granting the permission prompt, grant it; the mic indicator stays on with the control Disconnected
   - test-tags: UNIT
@@ -103,7 +109,8 @@ Reconnect, teardown and concurrent tabs
   - log: 2026-09-28T09:55:14Z @kj added
   - log: 2026-09-28T10:21:11Z @kj closed: fixed: enable() takes an epoch token that disable() advances; a stale call stops its late stream and returns
   - log: 2026-11-06T16:30:02Z @kj coded DOUBLE-CLICK
-- [x] `DEF-LIFE-10-FIRST-RELOAD` **Streaming tab stays on 1.0.18 after the first soft reload** - MEDIUM; after the first soft reload from 1.0.18, a streaming tab stays on the 1.0.18 /stream handler, whose sink is closed, so its audio does not reach voicein until the tab reconnects; workaround: reload the tab, which the new speaker frontend needs anyway, or turn capture off and on; `jupyterlab_voice_capture_extension/__init__.py`
+  - log: 2026-11-11T23:47:49Z @kj amended text "clicking again while the permission prompt or audio start is pending shows Disconnected, but when getUserMedia resolves the capture pipeline starts anyway and the stream is never released; `src/voice-capture.ts`" -> "clicking again while the permission prompt or audio start is pending shows Disconnected, but when getUserMedia resolves the capture pipeline starts anyway and the stream is never released; `src/audio-capture.ts`"; reason: frontend module renamed
+- [x] `DEF-LIFE-10-FIRST-RELOAD` **Streaming tab stays on 1.0.18 after the first soft reload** - MEDIUM; after the first soft reload from 1.0.18, a streaming tab stays on the 1.0.18 /stream handler, whose sink is closed, so its audio does not reach voicein until the tab reconnects; workaround: reload the tab, which the new speaker frontend needs anyway, or turn capture off and on; `jupyterlab_audio_extension/__init__.py`
   - evidence: pytest test_a_load_after_1_0_18_closes_its_producer_so_the_tab_reconnects green, test_routes 24 passed, full pytest 47 passed; red without the close (TimeoutError) and with code 4001; soft_reload simulated from installed 1.0.18: its /stream socket closed with 1001, a new /stream reaches the FIFO
   - test-tags: INTEGRATION
   - related: ACC-LIFE-42-RECONNECT - holds only for previous loads of this version or later
@@ -115,7 +122,8 @@ Reconnect, teardown and concurrent tabs
   - log: 2026-11-06T18:04:05Z @kj edited test-tags added "MANUAL"
   - log: 2026-11-06T21:09:54Z @kj edited test-tags "MANUAL" -> "INTEGRATION"
   - log: 2026-11-06T21:09:54Z @kj closed: fixed: setup_route_handlers closes the producer a previous handler class keeps in `_active` with code 1001 before it removes that class's rules, workflow tmp/workflows/autoplay; `routes.py`
-- [x] `DEF-LIFE-11-OLD-ROUTES` **Previous load's routes stay registered after a soft reload** - MINOR; after each soft reload the previous load's /stream and /speaker rules stay in the tornado router behind the new ones; they are unreachable but keep the old handler classes and the closed sink in memory, one set per reload; `jupyterlab_voice_capture_extension/__init__.py`
+  - log: 2026-11-11T23:47:52Z @kj amended text "after the first soft reload from 1.0.18, a streaming tab stays on the 1.0.18 /stream handler, whose sink is closed, so its audio does not reach voicein until the tab reconnects; workaround: reload the tab, which the new speaker frontend needs anyway, or turn capture off and on; `jupyterlab_voice_capture_extension/__init__.py`" -> "after the first soft reload from 1.0.18, a streaming tab stays on the 1.0.18 /stream handler, whose sink is closed, so its audio does not reach voicein until the tab reconnects; workaround: reload the tab, which the new speaker frontend needs anyway, or turn capture off and on; `jupyterlab_audio_extension/__init__.py`"; reason: module renamed
+- [x] `DEF-LIFE-11-OLD-ROUTES` **Previous load's routes stay registered after a soft reload** - MINOR; after each soft reload the previous load's /stream and /speaker rules stay in the tornado router behind the new ones; they are unreachable but keep the old handler classes and the closed sink in memory, one set per reload; `jupyterlab_audio_extension/__init__.py`
   - evidence: pytest test_a_second_load_removes_the_previous_routes green: only the new load's 2 handler classes stay, 4 without the removal; test_routes 24 passed, full pytest 47 passed; red without the `_remove_previous_routes` call and without rules.remove(rule)
   - test-tags: INTEGRATION
   - related: ACC-LIFE-41-RELOAD - the new code serves the paths, the old rules remain behind it
@@ -126,20 +134,25 @@ Reconnect, teardown and concurrent tabs
   - log: 2026-11-06T18:04:06Z @kj edited test-tags added "MANUAL"
   - log: 2026-11-06T21:09:54Z @kj edited test-tags "MANUAL" -> "INTEGRATION"
   - log: 2026-11-06T21:09:54Z @kj closed: fixed: on load, setup_route_handlers removes the previous load's rules under <base_url>/jupyterlab-voice-capture-extension/ from default_router and wildcard_router, and a host rule left empty, workflow tmp/workflows/autoplay; `routes.py`
+  - log: 2026-11-11T23:47:52Z @kj amended text "after each soft reload the previous load's /stream and /speaker rules stay in the tornado router behind the new ones; they are unreachable but keep the old handler classes and the closed sink in memory, one set per reload; `jupyterlab_voice_capture_extension/__init__.py`" -> "after each soft reload the previous load's /stream and /speaker rules stay in the tornado router behind the new ones; they are unreachable but keep the old handler classes and the closed sink in memory, one set per reload; `jupyterlab_audio_extension/__init__.py`"; reason: module renamed
 
 ## Operator CLI `CLI`
 
-jupyterlab_voice_capture install, start, stop and validate
+jupyterlab_audio install, start, stop and validate
 
-- [x] `DEF-CLI-6-LEFTOVER-FIFO` **start fails silently after a container restart** - MAJOR; after a container restart the old FIFO is still at the sink path (/run here is on the overlay root, not tmpfs); start then fails to load voicein because module-pipe-source refuses an existing path, yet exits 0; `jupyterlab_voice_capture_extension/cli.py`
+- log: 2026-11-11T23:47:55Z @kj description "jupyterlab_voice_capture install, start, stop and validate" -> "jupyterlab_audio install, start, stop and validate"
+
+- [x] `DEF-CLI-6-LEFTOVER-FIFO` **start fails silently after a container restart** - MAJOR; after a container restart the old FIFO is still at the sink path (/run here is on the overlay root, not tmpfs); start then fails to load voicein because module-pipe-source refuses an existing path, yet exits 0; `jupyterlab_audio_extension/cli.py`
   - evidence: test_start_removes_a_leftover_fifo_before_loading_the_source and test_start_exits_1_when_the_source_did_not_load green, both red without the fix
-  - repro: stop the daemon without unloading the source (or restart the container), run jupyterlab_voice_capture start -d; exit 0, pactl shows no voicein
+  - repro: stop the daemon without unloading the source (or restart the container), run jupyterlab_audio start -d; exit 0, pactl shows no voicein
   - test-tags: UNIT
   - root-cause: 2026-09-28T09:55:14Z @kj \_start_pulse_and_source loads module-pipe-source without removing a leftover FIFO, and cmd_start checks only that the daemon runs, not that the source loaded
   - log: 2026-09-28T09:55:14Z @kj added
   - log: 2026-09-28T10:21:11Z @kj closed: fixed: start removes a leftover FIFO before loading module-pipe-source and exits 1 when voicein is not loaded
   - log: 2026-11-06T16:30:02Z @kj coded LEFTOVER-FIFO
-- [x] `DEF-CLI-14-FALSE-DONE` **install prints Done after a failed command** - MINOR; after apt-get update, apt-get install, install -d or the client.conf write fails, install still prints 'Done. install does not start the daemon. Next steps:' and the start -d step; it exits 1; `jupyterlab_voice_capture_extension/cli.py`
+  - log: 2026-11-11T23:47:55Z @kj amended text "after a container restart the old FIFO is still at the sink path (/run here is on the overlay root, not tmpfs); start then fails to load voicein because module-pipe-source refuses an existing path, yet exits 0; `jupyterlab_voice_capture_extension/cli.py`" -> "after a container restart the old FIFO is still at the sink path (/run here is on the overlay root, not tmpfs); start then fails to load voicein because module-pipe-source refuses an existing path, yet exits 0; `jupyterlab_audio_extension/cli.py`"; reason: module renamed
+  - log: 2026-11-11T23:47:55Z @kj edited repro "stop the daemon without unloading the source (or restart the container), run jupyterlab_voice_capture start -d; exit 0, pactl shows no voicein" -> "stop the daemon without unloading the source (or restart the container), run jupyterlab_audio start -d; exit 0, pactl shows no voicein"; reason: CLI renamed from jupyterlab_voice_capture to jupyterlab_audio
+- [x] `DEF-CLI-14-FALSE-DONE` **install prints Done after a failed command** - MINOR; after apt-get update, apt-get install, install -d or the client.conf write fails, install still prints 'Done. install does not start the daemon. Next steps:' and the start -d step; it exits 1; `jupyterlab_audio_extension/cli.py`
   - evidence: test_install_prints_done_only_when_no_step_failed red on the old code ('Done.' printed after apt-get update returned 100, failure line missing), green after the fix; test_cli.py 30 passed
   - repro: cli._run patched to return 100 for apt-get update, config and sink dir in a temp dir, run install: 'Done.' and the next steps, rc 1
   - test-tags: UNIT
@@ -147,7 +160,8 @@ jupyterlab_voice_capture install, start, stop and validate
   - log: 2026-11-06T21:42:48Z @kj reported by the build stage of workflow tmp/workflows/fixes; not fixed: F4 ordered the exit code only
   - log: 2026-11-07T07:33:46Z @kj edited test-tags "MANUAL" -> "UNIT"
   - log: 2026-11-07T07:33:46Z @kj closed: fixed: when a step failed, install prints 'install failed - fix the errors above and run install again.' and returns 1; 'Done.' and the next steps only when no step failed
-- [x] `DEF-CLI-15-APTGET-MISSING` **install exits 0 when apt-get is missing** - MEDIUM; with no apt-get on PATH install installs no package, prints 'apt-get not found - install these with your platform's package manager:' and 'Done.', and exits 0, which the top-level help lists as success; `jupyterlab_voice_capture_extension/cli.py`
+  - log: 2026-11-11T23:47:58Z @kj amended text "after apt-get update, apt-get install, install -d or the client.conf write fails, install still prints 'Done. install does not start the daemon. Next steps:' and the start -d step; it exits 1; `jupyterlab_voice_capture_extension/cli.py`" -> "after apt-get update, apt-get install, install -d or the client.conf write fails, install still prints 'Done. install does not start the daemon. Next steps:' and the start -d step; it exits 1; `jupyterlab_audio_extension/cli.py`"; reason: module renamed
+- [x] `DEF-CLI-15-APTGET-MISSING` **install exits 0 when apt-get is missing** - MEDIUM; with no apt-get on PATH install installs no package, prints 'apt-get not found - install these with your platform's package manager:' and 'Done.', and exits 0, which the top-level help lists as success; `jupyterlab_audio_extension/cli.py`
   - evidence: test_install_without_apt_get_fails_only_when_a_package_is_missing: [False-1] red on the old code (assert 0 == 1), [True-0] green there too; both green after the fix; test_cli.py 30 passed
   - repro: no apt-get on PATH (shutil.which patched to None), config and sink dir in a temp dir, run install: rc 0
   - test-tags: UNIT
@@ -156,6 +170,7 @@ jupyterlab_voice_capture install, start, stop and validate
   - log: 2026-11-07T07:33:46Z @kj edited test-tags "MANUAL" -> "UNIT"
   - log: 2026-11-07T07:33:46Z @kj the Star Colonel ordered the fix on 2026-11-07: install exits with an error when a required package is missing and apt-get is absent
   - log: 2026-11-07T07:33:46Z @kj closed: fixed: with no apt-get on PATH, install returns 1 when a package row of validate fails, 0 when every package is installed
+  - log: 2026-11-11T23:47:58Z @kj amended text "with no apt-get on PATH install installs no package, prints 'apt-get not found - install these with your platform's package manager:' and 'Done.', and exits 0, which the top-level help lists as success; `jupyterlab_voice_capture_extension/cli.py`" -> "with no apt-get on PATH install installs no package, prints 'apt-get not found - install these with your platform's package manager:' and 'Done.', and exits 0, which the top-level help lists as success; `jupyterlab_audio_extension/cli.py`"; reason: module renamed
 
 ## Speaker output `SPEAK`
 
@@ -177,14 +192,17 @@ Browser microphone capture, the status-bar control and the enable and disable co
 
 - log: 2026-11-07T13:30:52Z @kj category created
 
-- [x] `DEF-MIC-16-OPEN-PROMPT` **Open permission prompt holds the tab's commands relay** - MINOR; while the browser microphone permission prompt is open and unanswered, voice-capture:enable does not settle, so every later jupyterlab-commands execute to that tab (play-file, disable) fails after the relay's 30 s timeout until the prompt is answered; `src/index.ts`
+- [x] `DEF-MIC-16-OPEN-PROMPT` **Open permission prompt holds the tab's commands relay** - MINOR; while the browser microphone permission prompt is open and unanswered, audio:enable does not settle, so every later jupyterlab-commands execute to that tab (play-file, disable) fails after the relay's 30 s timeout until the prompt is answered; `src/index.ts`
   - evidence: jest 'enable rejects at the connect deadline while the permission prompt is unanswered, and Allow later still starts capture' red before (received ""), green after; jest 35/35, eslint 0 errors 6 warnings, prettier clean, jlpm build ok
-  - repro: run voice-capture:enable while the permission prompt is open, then play-file to the same tab; it fails after 30 s
+  - repro: run audio:enable while the permission prompt is open, then play-file to the same tab; it fails after 30 s
   - test-tags: UNIT
-  - root-cause: 2026-11-07T13:30:52Z @kj the jupyterlab-commands relay awaits each command before it runs the next one; enable awaits getUserMedia with no deadline (src/voice-capture.ts:83)
+  - root-cause: 2026-11-11T23:48:01Z @kj the jupyterlab-commands relay awaits each command before it runs the next one; enable awaits getUserMedia with no deadline (src/audio-capture.ts:83)
   - log: 2026-11-07T13:30:52Z @kj added
   - log: 2026-11-07T13:30:58Z @kj the Star Colonel ordered the fix on 2026-11-07; deferred from review round 5 (tmp/workflows/review/state-r6.json)
   - log: 2026-11-07T13:32:06Z @kj closed: fixed: the enable command rejects when no state change comes within CONNECT_TIMEOUT_MS (10 s) while connecting; capture keeps waiting for the answer; patch tmp/workflows/review/fix-r7/c1.patch; `src/index.ts`
+  - log: 2026-11-11T23:48:01Z @kj amended text "while the browser microphone permission prompt is open and unanswered, voice-capture:enable does not settle, so every later jupyterlab-commands execute to that tab (play-file, disable) fails after the relay's 30 s timeout until the prompt is answered; `src/index.ts`" -> "while the browser microphone permission prompt is open and unanswered, audio:enable does not settle, so every later jupyterlab-commands execute to that tab (play-file, disable) fails after the relay's 30 s timeout until the prompt is answered; `src/index.ts`"; reason: command id renamed from voice-capture:enable to audio:enable
+  - log: 2026-11-11T23:48:01Z @kj edited repro "run voice-capture:enable while the permission prompt is open, then play-file to the same tab; it fails after 30 s" -> "run audio:enable while the permission prompt is open, then play-file to the same tab; it fails after 30 s"; reason: command id renamed from voice-capture:enable to audio:enable
+  - log: 2026-11-11T23:48:01Z @kj root-cause updated "2026-11-07T13:30:52Z @kj the jupyterlab-commands relay awaits each command before it runs the next one; enable awaits getUserMedia with no deadline (src/voice-capture.ts:83)" -> "the jupyterlab-commands relay awaits each command before it runs the next one; enable awaits getUserMedia with no deadline (src/audio-capture.ts:83)"; reason: frontend module renamed
 
 ## Virtual player `PLAYER`
 
@@ -200,10 +218,12 @@ Server-side player and its transport state
   - log: 2026-11-10T23:54:47Z @kj added
   - log: 2026-11-10T23:54:47Z @kj closed: fixed in the controls change set
   - log: 2026-11-10T23:54:53Z @kj edited test-tags added "UNIT"
-- [x] `DEF-PLAYER-18-LAMP-TOOLTIP` **Lamp tooltip reports voice capture instead of the audio system** - MINOR; the status-bar lamp reports the voice-capture state in its tooltip, inherited from the pill, so hovering the indicator says nothing about the audio system; the lamp must name the audio-system state: ready, in use, shut down or unavailable
+- [x] `DEF-PLAYER-18-LAMP-TOOLTIP` **Lamp tooltip reports audio capture instead of the audio system** - MINOR; the status-bar lamp reports the audio-capture state in its tooltip, inherited from the pill, so hovering the indicator says nothing about the audio system; the lamp must name the audio-system state: ready, in use, shut down or unavailable
   - evidence: jest 6 suites / 62 tests pass: lamp role=img with title and aria-label Audio system ready at idle, in use while playing or streaming, unavailable on missing, shut down after a deliberate shutdown; Galata 20 passed, 0 failed: lamp title unavailable, ready and shut down
-  - repro: hover the lamp in the status bar: the tooltip reads the pill line Disconnected - Voice capture off - click to start, not the audio-system state
+  - repro: hover the lamp in the status bar: the tooltip reads the pill line Disconnected - Audio capture off - click to start, not the audio-system state
   - test-tags: UNIT, FUNCTIONAL
   - root-cause: 2026-11-11T21:54:38Z @kj the lamp carried aria-hidden and no title or aria-label; the browser fell back to the parent pill title set in _refresh() (src/status.ts:188-192), so the lamp had no audio-system words
   - log: 2026-11-11T21:54:38Z @kj added
   - log: 2026-11-11T21:54:44Z @kj closed
+  - log: 2026-11-11T23:48:03Z @kj amended title "Lamp tooltip reports voice capture instead of the audio system" -> "Lamp tooltip reports audio capture instead of the audio system"; text "the status-bar lamp reports the voice-capture state in its tooltip, inherited from the pill, so hovering the indicator says nothing about the audio system; the lamp must name the audio-system state: ready, in use, shut down or unavailable" -> "the status-bar lamp reports the audio-capture state in its tooltip, inherited from the pill, so hovering the indicator says nothing about the audio system; the lamp must name the audio-system state: ready, in use, shut down or unavailable"; reason: product copy renamed from Voice capture to Audio capture
+  - log: 2026-11-11T23:48:04Z @kj edited repro "hover the lamp in the status bar: the tooltip reads the pill line Disconnected - Voice capture off - click to start, not the audio-system state" -> "hover the lamp in the status bar: the tooltip reads the pill line Disconnected - Audio capture off - click to start, not the audio-system state"; reason: pill copy renamed from Voice capture off to Audio capture off

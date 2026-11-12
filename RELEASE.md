@@ -1,6 +1,6 @@
 # Release v1.0.8 - first release
 
-The inaugural release of `jupyterlab_voice_capture_extension`, a JupyterLab 4
+The inaugural release of `jupyterlab_audio_extension`, a JupyterLab 4
 `frontend-and-server` extension that routes a browser microphone into a sealed
 JupyterLab container. The browser captures audio, ships it over an authenticated
 websocket to a Jupyter server handler, and the handler writes raw PCM to a FIFO so
@@ -8,7 +8,7 @@ terminal applications in the container - such as Claude Code voice mode - can re
 from the user's microphone where no capture device otherwise exists.
 
 This release is feature-complete against the acceptance criteria in
-`docs/acc-crit-voice-capture.md` and verified end-to-end, including the full
+`docs/acc-crit-audio.md` and verified end-to-end, including the full
 FIFO → PulseAudio → SoX recording round-trip.
 
 ## What it does
@@ -22,7 +22,7 @@ plumbing that turns that FIFO into the system default audio source.
 
 ## Capture and UI
 
-- Status-bar microphone toggle plus a **Toggle Voice Capture** command-palette entry
+- Status-bar microphone toggle plus a **Toggle Audio Capture** command-palette entry
 - `getUserMedia` capture with an AudioWorklet that downmixes to mono and encodes s16le off the UI thread
 - Four states with distinct status-bar styling - Disconnected, Connecting, Connected, Error - the icon glows green while streaming
 - Reconnect with capped exponential backoff; the toggle stays on across a dropped connection and recovers automatically
@@ -32,18 +32,18 @@ plumbing that turns that FIFO into the system default audio source.
 
 ## Transport and server bridge
 
-- 20 ms PCM frames (640 bytes) sent as binary websocket messages to `…/jupyterlab-voice-capture-extension/stream`
+- 20 ms PCM frames (640 bytes) sent as binary websocket messages to `…/jupyterlab-audio-extension/stream`
 - Authenticated websocket handler under `base_url` - inherits Jupyter token auth, rejects anonymous connections
 - `FifoSink` runs a background writer thread with a bounded queue, tolerating an absent reader without crashing or blocking the server IOLoop
 - The PulseAudio reader (`module-pipe-source`) owns FIFO creation; the server attaches as writer and waits for the pipe to appear
 
 ## Operator CLI
 
-A separate console-script tool, `jupyterlab_voice_capture`, provisions and verifies the
+A separate console-script tool, `jupyterlab_audio`, provisions and verifies the
 container plumbing. The extension itself never manages PulseAudio or SoX (acceptance
 group F); the CLI is the operator's hand tool.
 
-- `install` - apt packages, the lab-owned `/run/voice` runtime dir, `/etc/pulse/client.conf`, and the `c.VoiceCapture.sink_path` line; does not start the daemon
+- `install` - apt packages, the lab-owned `/run/voice` runtime dir, `/etc/pulse/client.conf`, and the `c.AudioCapture.sink_path` line; does not start the daemon
 - `start` / `stop` - manage the userspace PulseAudio daemon and the `voicein` pipe-source
 - `validate` - checks every component and prints how to fix what is missing; `--json` emits a machine-readable report; the source reads connected only when its FIFO is real
 - Conservative status colour (green OK, orange warning, red missing) on a capable terminal; honours `NO_COLOR` and `--json`
@@ -52,8 +52,8 @@ group F); the CLI is the operator's hand tool.
 
 - PCM - signed 16-bit little-endian, 16 kHz, mono
 - Frame - one binary websocket message of 20 ms (640 bytes)
-- Sink - FIFO at `/run/voice/pulseaudio.fifo` by default, overridable via `c.VoiceCapture.sink_path` and the CLI `--sink-path`
-- Endpoint - `…/jupyterlab-voice-capture-extension/stream`, Jupyter token auth
+- Sink - FIFO at `/run/voice/pulseaudio.fifo` by default, overridable via `c.AudioCapture.sink_path` and the CLI `--sink-path`
+- Endpoint - `…/jupyterlab-audio-extension/stream`, Jupyter token auth
 
 ## Requirements
 
@@ -64,8 +64,10 @@ group F); the CLI is the operator's hand tool.
 ## Install
 
 ```bash
-pip install jupyterlab-voice-capture-extension
+pip install jupyterlab-audio-extension
 ```
+
+The `stellars_jupyterlab_extensions` dependency moves to `jupyterlab-audio-extension` before this release ships.
 
 See `README.md` for usage and `docs/jupyterlab-enable-claude-voice.md` for the full
 container setup, the operator CLI, and troubleshooting.

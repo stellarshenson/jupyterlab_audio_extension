@@ -30,7 +30,7 @@ user's microphone.
 captures mic audio, ships it over an authenticated websocket to a Jupyter server-extension
 handler, and the handler writes raw PCM to a FIFO sink. A separate, out-of-scope plumbing
 layer (PulseAudio `module-pipe-source` + SoX) turns that FIFO into the system default audio
-source. The contract between the two halves is `docs/acc-crit-voice-capture.md`.
+source. The contract between the two halves is `docs/acc-crit-audio.md`.
 
 **Technology Stack**:
 - TypeScript frontend against `@jupyterlab/application`, `@jupyterlab/services`, `@jupyterlab/coreutils` (JupyterLab >= 4.0.0)
@@ -39,12 +39,12 @@ source. The contract between the two halves is `docs/acc-crit-voice-capture.md`.
 - Tests: Jest (frontend), pytest + pytest-jupyter (server), Playwright (`ui-tests/`)
 - CI/CD: `jupyter-releaser` (see `RELEASE.md`)
 
-**Wire contract** (from `docs/acc-crit-voice-capture.md`): PCM = signed 16-bit little-endian,
+**Wire contract** (from `docs/acc-crit-audio.md`): PCM = signed 16-bit little-endian,
 16 kHz, mono; frame = one binary websocket message of PCM; default sink `/tmp/voice.fifo`.
 
 **Conventions**:
 - Generated from the `jupyterlab/extension-template` copier template (v4.6.0); `.copier-answers.yml` is machine-managed, NEVER edit manually
-- Python package on PyPI: `jupyterlab_voice_capture_extension`; npm package: `@stellarshenson/jupyterlab-voice-capture-extension`
+- Python package on PyPI: `jupyterlab_audio_extension`; npm package: `@stellarshenson/jupyterlab-audio-extension`
 - Build/install/test go through the `Makefile` targets, not raw `jlpm`/`pip` commands
 
 ## Project Standards (Reinforced)
@@ -63,5 +63,5 @@ source. The contract between the two halves is `docs/acc-crit-voice-capture.md`.
 
 ## Strengthened Rules
 
-- **No slop**: this is a fresh template scaffold - implement exactly what is asked against the acceptance criteria in `docs/acc-crit-voice-capture.md`; do not add features, fallbacks, or scaffolding the user did not request
+- **No slop**: this is a fresh template scaffold - implement exactly what is asked against the acceptance criteria in `docs/acc-crit-audio.md`; do not add features, fallbacks, or scaffolding the user did not request
 - **Project boundary**: stay within this extension; the PulseAudio/SoX plumbing layer is out of scope

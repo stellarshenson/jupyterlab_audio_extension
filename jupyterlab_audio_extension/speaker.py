@@ -14,7 +14,7 @@ import select
 import stat
 import threading
 
-# File name of the speaker FIFO, in the directory of c.VoiceCapture.sink_path.
+# File name of the speaker FIFO, in the directory of c.AudioCapture.sink_path.
 SPEAKER_FIFO_NAME = "speaker.fifo"
 
 # Written by the stop command beside the speaker FIFO; the player reports it as a
@@ -44,7 +44,7 @@ class SpeakerReader:
     def start(self):
         """Launch the reader thread."""
         self._thread = threading.Thread(
-            target=self._run, name="voice-capture-speaker-reader", daemon=True
+            target=self._run, name="audio-speaker-reader", daemon=True
         )
         self._thread.start()
 
@@ -65,7 +65,7 @@ class SpeakerReader:
                 self._stop.wait(0.2)  # module-pipe-sink has not created the FIFO yet
                 continue
             except OSError as exc:
-                self._log.warning("voice-capture: cannot open speaker %s: %s", self._path, exc)
+                self._log.warning("audio-capture: cannot open speaker %s: %s", self._path, exc)
                 self._stop.wait(0.5)
                 continue
             try:
@@ -73,11 +73,11 @@ class SpeakerReader:
                     self._read(fd)
                 elif not refused:
                     self._log.error(
-                        "voice-capture: speaker %s is not a FIFO; refusing to read it", self._path
+                        "audio-capture: speaker %s is not a FIFO; refusing to read it", self._path
                     )
                     refused = True
             except OSError as exc:
-                self._log.warning("voice-capture: speaker read failed, reopening: %s", exc)
+                self._log.warning("audio-capture: speaker read failed, reopening: %s", exc)
             finally:
                 os.close(fd)
             self._stop.wait(0.2)

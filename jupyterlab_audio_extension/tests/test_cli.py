@@ -4,8 +4,9 @@ import time
 
 import pytest
 
-import jupyterlab_voice_capture_extension.cli as cli
-from jupyterlab_voice_capture_extension.speaker import STOP_MARKER_NAME
+import jupyterlab_audio_extension.cli as cli
+from jupyterlab_audio_extension import _sink_path
+from jupyterlab_audio_extension.speaker import STOP_MARKER_NAME
 
 
 def test_install_dry_run_uses_apt_never_conda(capsys, monkeypatch):
@@ -90,6 +91,35 @@ def test_install_without_apt_get_fails_only_when_a_package_is_missing(
     assert ("Done." in capsys.readouterr().out) == present
 
 
+def test_a_saved_voice_capture_sink_path_is_used_when_the_new_key_is_absent():
+    # The 1.1.8 config wrote c.VoiceCapture.sink_path; the renamed extension must honour it.
+    from traitlets.config import Config
+
+    assert _sink_path(Config({"VoiceCapture": {"sink_path": "/old.fifo"}})) == "/old.fifo"
+
+
+def test_the_audio_capture_sink_path_wins_over_the_saved_voice_capture_one():
+    from traitlets.config import Config
+
+    config = Config(
+        {
+            "VoiceCapture": {"sink_path": "/old.fifo"},
+            "AudioCapture": {"sink_path": "/new.fifo"},
+        }
+    )
+    assert _sink_path(config) == "/new.fifo"
+
+
+def test_a_config_with_only_the_saved_voice_capture_line_is_left_untouched(tmp_path, capsys):
+    cfg = tmp_path / "jupyter_server_config.py"
+    cfg.write_text('c.VoiceCapture.sink_path = "/custom/voice.fifo"\n')
+
+    cli._write_sink_config(str(cfg), "/run/voice/pulseaudio.fifo", dry=False)
+
+    assert cfg.read_text() == 'c.VoiceCapture.sink_path = "/custom/voice.fifo"\n'
+    assert "sink_path already set" in capsys.readouterr().out
+
+
 def test_validate_reports_missing_and_prints_config(capsys, monkeypatch):
     monkeypatch.setattr(cli, "_COLOR", False)
     monkeypatch.setattr(cli.shutil, "which", lambda name: None)
@@ -105,7 +135,7 @@ def test_validate_reports_missing_and_prints_config(capsys, monkeypatch):
 
     assert rc == 1  # something missing
     assert "[MISS]" in out
-    assert 'c.VoiceCapture.sink_path = "/run/voice/pulseaudio.fifo"' in out
+    assert 'c.AudioCapture.sink_path = "/run/voice/pulseaudio.fifo"' in out
     assert "AUDIODRIVER=pulseaudio" in out
 
 
@@ -488,4 +518,4 @@ def test_command_help_says_what_it_does_and_shows_examples(capsys, command, says
     flat = " ".join(out.split())  # the descriptions break their lines by hand
     for phrase in says:
         assert phrase in flat
-    assert f"examples:\n  jupyterlab_voice_capture {command}" in out
+    assert f"examples:\n  jupyterlab_audio {command}" in out

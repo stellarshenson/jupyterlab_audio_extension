@@ -1893,9 +1893,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@stellarshenson/jupyterlab-voice-capture-extension-ui-tests@workspace:.":
+"@stellarshenson/jupyterlab-audio-extension-ui-tests@workspace:.":
   version: 0.0.0-use.local
-  resolution: "@stellarshenson/jupyterlab-voice-capture-extension-ui-tests@workspace:."
+  resolution: "@stellarshenson/jupyterlab-audio-extension-ui-tests@workspace:."
   dependencies:
     "@jupyterlab/galata": ^5.6.4
     "@playwright/test": ^1.64.0

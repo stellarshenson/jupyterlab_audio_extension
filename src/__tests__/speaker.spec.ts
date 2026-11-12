@@ -10,7 +10,7 @@ import { SPEAKER_PROCESSOR_NAME } from '../speaker-worklet';
 
 /**
  * Playback lifecycle tests with minimal Web Audio + WebSocket fakes, as in
- * voice-capture.spec.ts. The fake context starts suspended and resumes only while
+ * audio-capture.spec.ts. The fake context starts suspended and resumes only while
  * `allowed` is set, which stands in for the browser's autoplay policy.
  */
 
@@ -101,7 +101,7 @@ describe('Speaker', () => {
     expect(node.options.outputChannelCount).toEqual([2]);
     expect(node.connect).toHaveBeenCalledWith(ctx.destination);
     expect(FakeWebSocket.last.url).toContain(
-      'jupyterlab-voice-capture-extension/speaker'
+      'jupyterlab-audio-extension/speaker'
     );
     expect(FakeWebSocket.last.url).toContain('token=secret-token');
     expect(FakeWebSocket.last.binaryType).toBe('arraybuffer');

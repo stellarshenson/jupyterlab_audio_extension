@@ -134,7 +134,7 @@ clean: uninstall  check_dependencies
 
 ## uninstall package
 uninstall:  check_dependencies
-	pip uninstall -y dist/*.whl 2>/dev/null || true
+	pip uninstall -y jupyterlab_audio_extension jupyterlab_voice_capture_extension 2>/dev/null || true
 
 ## check if required dependencies are installed in the project-local nodeenv
 check_dependencies:
