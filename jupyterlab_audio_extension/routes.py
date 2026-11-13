@@ -156,14 +156,17 @@ class PlayerHandler(APIHandler):
         self._speaker = speaker
 
     @tornado.web.authenticated
-    def post(self, *args, **kwargs):
+    async def post(self, *args, **kwargs):
         body = self.get_json_body() or {}
         if not isinstance(body, dict):
             raise tornado.web.HTTPError(400, "The player request must be a JSON object")
         action = body.get("action")
         try:
             if action == "play":
-                state = self._player.play(body.get("path"), body.get("mode", "queue"))
+                # play() waits START_GRACE_S on paplay; off the loop, the sockets keep moving.
+                state = await IOLoop.current().run_in_executor(
+                    None, self._player.play, body.get("path"), body.get("mode", "queue")
+                )
             elif action in ("pause", "resume", "stop", "clear", "status"):
                 state = getattr(self._player, action)()
             else:

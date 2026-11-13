@@ -263,3 +263,10 @@ Server-side player and its transport state
   - log: 2026-11-13T09:19:22Z @kj added
   - log: 2026-11-13T09:23:24Z @kj closed
   - log: 2026-11-13T09:23:31Z @kj edited evidence "jest player.spec DEF-PLAYER-20: an HTML 404 rejects with 'audio:player failed: HTTP 404'; Jest 64 green on 2026-11-13" -> "jest player.spec 'an error with no JSON body rejects with the HTTP status': an HTML 404 rejects with 'audio:player failed: HTTP 404'; Jest 64 green on 2026-11-13"
+- [x] `DEF-PLAYER-24-LOOP-BLOCK` **audio:player play blocks the server event loop for 200 ms** - MAJOR; a play request runs Player.play on the Jupyter event loop; its 0.2 s start wait on paplay stalls the /stream and /speaker websockets, longer than the 100 ms the tab speaker ring prebuffers; `jupyterlab_audio_extension/routes.py`
+  - evidence: PlayerHandler.post is a coroutine and runs Player.play through IOLoop.run_in_executor; review measurement on Player.play: loop gap 212 ms on the loop, 11 ms off it; build_test.py 2026-11-13: pytest 98 green with the jp_fetch player route tests (refusal text, 400 path), Jest 64, Galata 21
+  - repro: play a file through audio:player while sound streams to a tab: the loop does not run for 212 ms (measured), 11 ms with play off the loop
+  - test-tags: UNIT
+  - root-cause: 2026-11-13T18:03:35Z @kj PlayerHandler.post was a plain method that called Player.play on the loop; play waits START_GRACE_S (0.2 s) on paplay to read a refusal
+  - log: 2026-11-13T18:03:35Z @kj added
+  - log: 2026-11-13T18:07:01Z @kj closed
