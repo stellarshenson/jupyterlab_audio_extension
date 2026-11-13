@@ -37,6 +37,12 @@ jobs:
         set -eux
         jlpm run test
 
+    - name: Install PulseAudio for the player tests
+      run: |
+        set -eux
+        sudo apt-get update
+        sudo apt-get install -y pulseaudio pulseaudio-utils
+
     - name: Build the extension
       run: |
         set -eux
@@ -172,4 +178,4 @@ jobs:
           python_version: '3.13'
       - uses: jupyterlab/maintainer-tools/.github/actions/check-links@v1
         with:
-          ignore_links: "https://www.youtube.com/.* https://www.npmjs.com/package/.* https://pepy.tech/.* https://static.pepy.tech/.*"
+          ignore_links: "https://www.youtube.com/.* https://www.npmjs.com/package/.* https://pepy.tech/.* https://static.pepy.tech/.* https://www.paypal.com/.*"
