@@ -562,6 +562,10 @@ describe('VoiceStatus polling', () => {
 
       jest.advanceTimersByTime(2000);
       expect(request).toHaveBeenCalledTimes(2);
+      // DEF-LIFE-19: a poll must not count as activity for the server's idle shutdown.
+      for (const [url] of request.mock.calls) {
+        expect(url).toBe(`${ROUTE}?no_track_activity=1`);
+      }
 
       widget.dispose();
       jest.advanceTimersByTime(4000);

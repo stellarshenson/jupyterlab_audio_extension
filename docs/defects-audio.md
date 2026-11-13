@@ -135,6 +135,13 @@ Reconnect, teardown and concurrent tabs
   - log: 2026-11-06T21:09:54Z @kj edited test-tags "MANUAL" -> "INTEGRATION"
   - log: 2026-11-06T21:09:54Z @kj closed: fixed: on load, setup_route_handlers removes the previous load's rules under <base_url>/jupyterlab-voice-capture-extension/ from default_router and wildcard_router, and a host rule left empty, workflow tmp/workflows/autoplay; `routes.py`
   - log: 2026-11-11T23:47:52Z @kj amended text "after each soft reload the previous load's /stream and /speaker rules stay in the tornado router behind the new ones; they are unreachable but keep the old handler classes and the closed sink in memory, one set per reload; `jupyterlab_voice_capture_extension/__init__.py`" -> "after each soft reload the previous load's /stream and /speaker rules stay in the tornado router behind the new ones; they are unreachable but keep the old handler classes and the closed sink in memory, one set per reload; `jupyterlab_audio_extension/__init__.py`"; reason: module renamed
+- [x] `DEF-LIFE-19-POLL-ACTIVITY` **Status poll keeps the server counted as active** - MEDIUM; every open tab, hidden ones too, posts player status every 2 s; each post sets api_last_activity, so an idle culler or shutdown_no_activity_timeout never stops the server; cause: poll is an ordinary API request; fix: poll carries no_track_activity; `src/status.ts`
+  - evidence: jest status.spec 'asks the player for its status every 2 s': both poll URLs end ?no_track_activity=1, a click still posts the bare route; Jest 64, pytest 98, Galata 21 green on 2026-11-13
+  - repro: open one lab tab, leave it; GET /api/status last_activity keeps moving every 2 s
+  - test-tags: UNIT
+  - root-cause: 2026-11-13T09:19:22Z @kj APIHandler.finish sets api_last_activity on every authenticated request without no_track_activity; the 2 s status poll of VoiceStatus is such a request
+  - log: 2026-11-13T09:19:22Z @kj added
+  - log: 2026-11-13T09:23:24Z @kj closed
 
 ## Operator CLI `CLI`
 
@@ -227,3 +234,11 @@ Server-side player and its transport state
   - log: 2026-11-11T21:54:44Z @kj closed
   - log: 2026-11-11T23:48:03Z @kj amended title "Lamp tooltip reports voice capture instead of the audio system" -> "Lamp tooltip reports audio capture instead of the audio system"; text "the status-bar lamp reports the voice-capture state in its tooltip, inherited from the pill, so hovering the indicator says nothing about the audio system; the lamp must name the audio-system state: ready, in use, shut down or unavailable" -> "the status-bar lamp reports the audio-capture state in its tooltip, inherited from the pill, so hovering the indicator says nothing about the audio system; the lamp must name the audio-system state: ready, in use, shut down or unavailable"; reason: product copy renamed from Voice capture to Audio capture
   - log: 2026-11-11T23:48:04Z @kj edited repro "hover the lamp in the status bar: the tooltip reads the pill line Disconnected - Voice capture off - click to start, not the audio-system state" -> "hover the lamp in the status bar: the tooltip reads the pill line Disconnected - Audio capture off - click to start, not the audio-system state"; reason: pill copy renamed from Voice capture off to Audio capture off
+- [x] `DEF-PLAYER-20-NONJSON-ERROR` **audio:player hides the HTTP status of a non-JSON error** - MINOR; with the server extension disabled the route answers an HTML 404 and audio:player rejects with a JSON parse error instead of the HTTP status; cause: body parsed as JSON before the status check; fix: unparsable body falls back to the status message; `src/index.ts`
+  - evidence: jest player.spec 'an error with no JSON body rejects with the HTTP status': an HTML 404 rejects with 'audio:player failed: HTTP 404'; Jest 64 green on 2026-11-13
+  - repro: jupyter server extension disable jupyterlab_audio_extension, restart, run audio:player with action status
+  - test-tags: UNIT
+  - root-cause: 2026-11-13T09:19:22Z @kj execute awaits response.json() before reading response.ok, so a non-JSON error body throws SyntaxError
+  - log: 2026-11-13T09:19:22Z @kj added
+  - log: 2026-11-13T09:23:24Z @kj closed
+  - log: 2026-11-13T09:23:31Z @kj edited evidence "jest player.spec DEF-PLAYER-20: an HTML 404 rejects with 'audio:player failed: HTTP 404'; Jest 64 green on 2026-11-13" -> "jest player.spec 'an error with no JSON body rejects with the HTTP status': an HTML 404 rejects with 'audio:player failed: HTTP 404'; Jest 64 green on 2026-11-13"

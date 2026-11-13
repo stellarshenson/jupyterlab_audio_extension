@@ -117,6 +117,19 @@ describe('audio:player', () => {
       commands.get(PLAYER).execute({ action: 'play', path: 'missing.wav' })
     ).rejects.toThrow('Cannot play missing.wav');
   });
+
+  it('DEF-PLAYER-20: an error with no JSON body rejects with the HTTP status', async () => {
+    jest
+      .spyOn(ServerConnection, 'makeRequest')
+      .mockResolvedValue(
+        new Response('<html>Not Found</html>', { status: 404 })
+      );
+    const { commands } = activate();
+
+    await expect(
+      commands.get(PLAYER).execute({ action: 'status' })
+    ).rejects.toThrow('audio:player failed: HTTP 404');
+  });
 });
 
 describe('Stop All Audio', () => {

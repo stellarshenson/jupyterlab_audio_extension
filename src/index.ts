@@ -98,7 +98,8 @@ const plugin: JupyterFrontEndPlugin<void> = {
           { method: 'POST', body: JSON.stringify(args) },
           settings
         );
-        const state = await response.json();
+        // An error from outside the route (extension disabled, a proxy) has no JSON body.
+        const state = await response.json().catch(() => ({}));
         if (!response.ok) {
           throw new Error(
             state.message || `audio:player failed: HTTP ${response.status}`

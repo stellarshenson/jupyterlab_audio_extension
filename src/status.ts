@@ -283,7 +283,8 @@ export class VoiceStatus extends Widget {
           this._settings.baseUrl,
           'jupyterlab-audio-extension',
           'player'
-        ),
+          // A poll is not user activity: it must not hold off the server's idle shutdown.
+        ) + (action === 'status' ? '?no_track_activity=1' : ''),
         { method: 'POST', body: JSON.stringify({ action }) },
         this._settings
       );
