@@ -64,10 +64,13 @@ def _pulse_daemon():
     finally:
         os.environ.pop("PULSE_SERVER", None)
         subprocess.run(["pulseaudio", "--kill"], env=env, capture_output=True)
-        subprocess.run(
-            ["trash-put", "--trash-dir", "/tmp/.Trash-1000", runtime],
-            capture_output=True,
-        )
+        if shutil.which("trash-put"):
+            subprocess.run(
+                ["trash-put", "--trash-dir", "/tmp/.Trash-1000", runtime],
+                capture_output=True,
+            )
+        else:  # a CI runner has no trash-cli; the directory is this fixture's own
+            shutil.rmtree(runtime, ignore_errors=True)
 
 
 @pytest.fixture

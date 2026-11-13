@@ -39,6 +39,21 @@ Automated tests and the state they leave behind
   - log: 2026-11-06T21:09:55Z @kj added
   - log: 2026-11-06T21:09:55Z @kj reported by the build-autoplay stage of workflow tmp/workflows/autoplay: 4 runs in a row timed out; a copy of the config with webServer.timeout 360 s ran the suite; not fixed: outside the orders
   - log: 2026-11-06T21:42:48Z @kj closed: fixed: F5 of workflow tmp/workflows/fixes, webServer.timeout 360 * 1000 in ui-tests/playwright.config.js
+- [ ] `DEF-TEST-21-CI-PULSE` **Build job fails: runner has no PulseAudio** - MEDIUM; Build red on main since 16130b3: 3 pytest errors 'PulseAudio is not installed and PULSE_SERVER names no isolated daemon'; cause: the build job installs no pulseaudio, the paplay tests need one; fix: apt-get install pulseaudio pulseaudio-utils before pytest; `.github/workflows/build.yml`
+  - repro: push to main, read job Build / build, step Build the extension
+  - test-tags: INTEGRATION
+  - root-cause: 2026-11-13T09:29:32Z @kj the _pulse_daemon fixture fails, by design, where pulseaudio or pactl is missing; ubuntu-latest ships neither and build.yml installed neither
+  - log: 2026-11-13T09:29:32Z @kj added
+- [ ] `DEF-TEST-22-PAYPAL-LINK` **Check Links fails on the PayPal donate badge** - MINOR; job Check Links fails on the README PayPal donate link with 403; cause: paypal.com refuses the GitHub runner; fix: https://www.paypal.com/.* added to ignore_links; `.github/workflows/build.yml`
+  - repro: push to main, read job Build / Check Links
+  - test-tags: INTEGRATION
+  - root-cause: 2026-11-13T09:29:32Z @kj paypal.com answers 403 to the link checker on a GitHub runner; the link works in a browser
+  - log: 2026-11-13T09:29:32Z @kj added
+- [ ] `DEF-TEST-23-TRASH-PUT` **Pulse fixture teardown needs trash-put** - MINOR; where trash-cli is not installed the _pulse_daemon teardown raises FileNotFoundError: 'trash-put' and the last test using it reports an error; cause: teardown runs trash-put unconditionally; fix: rmtree of the fixture's own temp dir when trash-put is missing; `jupyterlab_audio_extension/tests/conftest.py`
+  - repro: run pytest on a machine with pulseaudio and without trash-cli
+  - test-tags: UNIT
+  - root-cause: 2026-11-13T09:34:33Z @kj the fixture removes its mkdtemp directory with the lab-only trash-put command and has no path for a machine without it
+  - log: 2026-11-13T09:34:33Z @kj added
 
 ## Server bridge `BRIDGE`
 
