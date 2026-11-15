@@ -2,6 +2,18 @@
 
 <!-- <START NEW CHANGELOG ENTRY> -->
 
+## [1.0.5] - 2026-11-15
+
+### Changed
+
+- Run the player's play call off the server event loop
+- Remove the pulse fixture directory where trash-put is missing
+- Install PulseAudio for the player tests and ignore the PayPal link
+
+### Fixed
+
+- Keep the status poll out of server activity and report a non-JSON player error
+
 ## [1.0.2] - 2026-11-12
 
 ### Changed
