@@ -911,3 +911,22 @@ New package, labextension, command and repository names, and the republish under
   - mechanism: 2026-11-11T22:56:48Z @kj rename the skill directory and its pyproject data-files path; rewrite the skill text for the new names
   - log: 2026-11-11T22:56:48Z @kj added
   - log: 2026-11-12T01:40:50Z @kj closed: skill renamed
+
+## Operator CLI `CLI`
+
+Commands shipped with the extension for the operator shell
+
+- log: 2026-11-25T13:17:25Z @kj category created
+
+- [x] `ACC-CLI-104-STATUS` **jupyterlab_audio status shows the extension state** - HIGH; jupyterlab_audio status prints one read-only report: the installed distribution, the required software, the runtime dir, both FIFOs, the daemon, the voicein and voiceout rows, client.conf and AUDIODRIVER, each present or missing with its fix; exit 0 when all are present, else 1; --json prints the same report
+  - evidence: test_cli.py test_status_all_present_exits_zero_and_lists_every_row, test_status_missing_component_exits_one_and_names_its_fix, test_status_reports_missing_distribution_metadata, test_status_json_carries_the_same_rows_and_examples and help test test_status_help_and_the_top_level_help_list_the_command pass (pytest -k 'status or validate or help': 25 passed, 69 deselected; full pytest 156 passed); make test PASS - Jest 8/8 suites 87/87 tests, pytest 156 passed, auth 'All endpoints of the extension require authentication.'; logs /home/lab/workspace/private/jupyterlab/jupyterlab_audio_extension/tmp/workflows/cli-status/logs/make-test.log, /home/lab/workspace/private/jupyterlab/jupyterlab_audio_extension/tmp/workflows/cli-status/logs/lint.log
+  - test: pytest test_cli.py: status with everything present exits 0 and lists each row; with a component missing it exits 1 and names its fix; --json parses and carries the same rows
+  - test-tags: UNIT
+  - log: 2026-11-25T13:17:25Z @kj added
+  - log: 2026-11-25T13:27:21Z @kj closed
+- [x] `ACC-CLI-105-SOFTWARE` **Status names missing software with apt and conda examples** - HIGH; for every required package (pulseaudio, pulseaudio-utils, sox, libsox-fmt-pulse) status marks it present or missing and, when missing, prints an example apt command and an example conda command; it states that conda-forge SoX lacks the PulseAudio driver; it prints the commands, never runs them
+  - evidence: test_cli.py test_status_missing_package_prints_apt_and_conda_examples (pulseaudio, pactl, rec), test_status_missing_sox_driver_prints_examples_and_the_caveat, test_status_all_present_exits_zero_and_lists_every_row and test_status_json_carries_the_same_rows_and_examples pass (pytest -k 'status or validate or help': 25 passed, 69 deselected; full pytest 156 passed); make test PASS - Jest 8/8 suites 87/87 tests, pytest 156 passed, auth 'All endpoints of the extension require authentication.'; logs /home/lab/workspace/private/jupyterlab/jupyterlab_audio_extension/tmp/workflows/cli-status/logs/make-test.log, /home/lab/workspace/private/jupyterlab/jupyterlab_audio_extension/tmp/workflows/cli-status/logs/lint.log
+  - test: pytest test_cli.py: with each package missing status prints the apt and conda examples and the SoX caveat; with all present it says so and prints no command
+  - test-tags: UNIT
+  - log: 2026-11-25T13:17:27Z @kj added
+  - log: 2026-11-25T13:27:23Z @kj closed

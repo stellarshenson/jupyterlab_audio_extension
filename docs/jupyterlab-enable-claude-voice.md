@@ -62,6 +62,9 @@ jupyterlab_audio start -d
 # check every component and print how to fix whatever is missing
 jupyterlab_audio validate
 
+# read-only report: distribution, software with apt and conda examples, bridge rows
+jupyterlab_audio status
+
 # kill the daemon
 jupyterlab_audio stop
 ```
@@ -69,8 +72,9 @@ jupyterlab_audio stop
 - `install` - one-time provisioning (detailed below); installs via apt only, creates the lab-owned `/run/voice` dir, and writes both config files; **does not start the daemon**
 - `start` - starts the daemon + loads + defaults the `voicein` source (step 4 below), which creates the FIFO, and the `voiceout` sink (see Speaker); `-d`/`--detached` returns immediately; run it after `install` and after every container restart
 - `validate` - checks every component, prints fixes plus the `c.AudioCapture.sink_path` line and the `AUDIODRIVER=pulseaudio` export; the `voicein` source reads green only when its FIFO exists and is a real FIFO; exits `0` when all present, `1` when anything is missing; add `--json` for a machine-readable report (no colour)
+- `status` - one read-only report that changes nothing: the installed distribution and its version, the required software (pulseaudio, pulseaudio-utils, sox, the SoX PulseAudio driver) with an example apt and conda command for each missing package, the runtime dir, both FIFOs, the daemon, the `voicein` source and `voiceout` sink with their defaults, `default-server` in `client.conf` and `AUDIODRIVER`; conda-forge SoX lacks the PulseAudio driver, so the apt build is required; exits `0` when every row is present, `1` otherwise; add `--json` for the same report as JSON (no colour)
 - `stop` - kills the userspace daemon (`pulseaudio --kill`)
-- `--sink-path PATH` - overrides the FIFO path on `install`/`validate`/`start` (default `/run/voice/pulseaudio.fifo`)
+- `--sink-path PATH` - overrides the FIFO path on `install`/`validate`/`status`/`start` (default `/run/voice/pulseaudio.fifo`)
 
 Output is coloured only for status - green OK, red missing, yellow warning - and only when stdout is an interactive terminal (`NO_COLOR` and `--json` disable it).
 
@@ -212,7 +216,7 @@ Runtime state is live-only: the daemon, the FIFO, the `/run/voice` dir, the pack
 
 ## Key facts
 
-- `install` / `validate` / `start` / `stop` automate and check this guide; `validate` prints the remaining manual settings (`c.AudioCapture.sink_path`, `AUDIODRIVER=pulseaudio`)
+- `install` / `validate` / `status` / `start` / `stop` automate and check this guide; `validate` prints the remaining manual settings (`c.AudioCapture.sink_path`, `AUDIODRIVER=pulseaudio`)
 - Claude's `rec` reaches pulse via `/etc/pulse/client.conf` (no `/mnt/wslg/PulseServer` symlink required); the only blocker was the missing `AUDIODRIVER`
 - diagnose the recorder with `strace -f -e trace=execve,connect -p <claude-pid>` while running `/voice` - the decisive lines are `execve("/usr/bin/rec", ["rec","--version"])` and its exit code
 - the pulse default source must be `voicein`; SoX with `AUDIODRIVER=pulseaudio` records the default source

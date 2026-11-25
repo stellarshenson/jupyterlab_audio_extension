@@ -19,10 +19,10 @@ Container has no sound device. The server player plays to the default sink voice
 
 ## Commands CLI
 
-- The commands relay is only for the microphone: `jupyterlab-commands execute audio:enable` starts capture for a program such as Claude Code /voice and `audio:disable` stops it; both need a registered browser tab and an allowlist entry
+- The commands relay drives the microphone: `jupyterlab-commands execute audio:enable` starts capture for a program such as Claude Code /voice and `audio:disable` stops it; both need a registered browser tab and an allowlist entry; for playback use the CLI player
 - `jupyterlab-commands list --json` prints each allowed id and its argument schema; an id outside the saved allowlist exits 4, and the user adds it in Settings > Commands Executor
 - Every `execute` carries `--purpose` (at most 25 words) and `--owner`; the token comes from `JUPYTERLAB_COMMANDS_TOKEN` or the server record; never print it
 
 ## Rules
 
-- No sound: `jupyterlab_audio player status` shows the sink state, and `jupyterlab_audio validate` checks the audio chain; ask the user before `jupyterlab_audio stop`
+- No sound: `jupyterlab_audio status` prints one read-only report - the distribution, the software with apt and conda examples for what is missing, the FIFOs, the daemon, the source and sink, `client.conf` and `AUDIODRIVER`; `jupyterlab_audio validate` prints fixes and `player status` shows the sink state; ask the user before `jupyterlab_audio stop`

@@ -2,6 +2,23 @@
 
 <!-- <START NEW CHANGELOG ENTRY> -->
 
+## [1.0.43] - 2026-11-25
+
+### Added
+
+- `jupyterlab_audio status` - one read-only report of the installed distribution, the required software, the runtime dir, both FIFOs, the daemon, the `voicein` source and `voiceout` sink with their defaults, `default-server` in `client.conf` and `AUDIODRIVER`; `--json` prints the same report; exit 0 only when every row is present
+- Each missing package (pulseaudio, pulseaudio-utils, sox, libsox-fmt-pulse) prints an example apt command and an example conda command, with the statement that conda-forge SoX lacks the PulseAudio driver
+
+### Changed
+
+- The shipped agent skill names `jupyterlab_audio status` for a no-sound check and says the commands relay drives the microphone while playback goes through the CLI player
+- The status report, its help, the README and the enable guide teach the command; the Galata test server carries the image page config into its scratch app settings dir before disabling the dictation frontend
+
+### Fixed
+
+- `status` pins `PULSE_SERVER` on its own probes, so a client config that enables autospawn cannot start a daemon during a read-only report; `validate` keeps its behaviour
+- Two player-discovery branches gain tests: several matching records are refused, and an environment base with no matching record sends no token
+
 ## [1.0.42] - 2026-11-25
 
 ### Added

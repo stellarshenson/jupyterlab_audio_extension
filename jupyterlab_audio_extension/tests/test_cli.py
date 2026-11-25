@@ -226,6 +226,227 @@ def test_validate_json_all_present_exits_zero(capsys, monkeypatch):
     assert data["missing"] == []
 
 
+def _status_all_present(monkeypatch):
+    """Every status row present, without running a command or querying a real daemon."""
+    monkeypatch.setattr(cli, "_COLOR", False)
+    monkeypatch.setattr(cli.shutil, "which", lambda name: "/usr/bin/" + name)
+    monkeypatch.setattr(cli, "_sox_has_pulse", lambda: True)
+    monkeypatch.setattr(
+        cli,
+        "_distribution_check",
+        lambda: ("distribution jupyterlab_audio_extension 9.9.9", True, ""),
+    )
+    monkeypatch.setattr(cli.os.path, "isdir", lambda p: True)
+    monkeypatch.setattr(cli, "_is_fifo", lambda p: True)
+    monkeypatch.setattr(cli, "_client_conf_has_default_server", lambda: True)
+    monkeypatch.setenv("AUDIODRIVER", "pulseaudio")
+
+    def fake_pactl(*args, **kwargs):
+        assert kwargs.get("pin_server") is True
+        if args and args[0] == "info":
+            return 0, (
+                f"Default Source: {cli.SOURCE_NAME}\nDefault Sink: {cli.SPEAKER_SINK_NAME}\n"
+            )
+        return 0, (
+            f"1\t{cli.SOURCE_NAME}\tmodule-pipe-source.c\ts16le 1ch 16000Hz\n"
+            f"2\t{cli.SPEAKER_SINK_NAME}\tmodule-pipe-sink.c\ts16le 2ch 48000Hz\n"
+        )
+
+    monkeypatch.setattr(cli, "_pactl", fake_pactl)
+
+    def never(*args, **kwargs):
+        raise AssertionError("status must not run a command")
+
+    monkeypatch.setattr(cli, "_run", never)
+    monkeypatch.setattr(cli.subprocess, "run", never)
+
+
+STATUS_ROWS = (
+    "distribution jupyterlab_audio_extension 9.9.9",
+    "pulseaudio",
+    "pulseaudio-utils (pactl)",
+    "sox (rec)",
+    "libsox-fmt-pulse (SoX PulseAudio driver)",
+    "runtime dir /run/voice",
+    "FIFO /run/voice/pulseaudio.fifo",
+    "speaker FIFO /run/voice/speaker.fifo",
+    "PulseAudio daemon reachable",
+    "source 'voicein' connected",
+    "default source is 'voicein'",
+    "sink 'voiceout' connected",
+    "default sink is 'voiceout'",
+    "default-server in client.conf",
+    "AUDIODRIVER=pulseaudio in this env",
+)
+
+
+def test_status_all_present_exits_zero_and_lists_every_row(capsys, monkeypatch):
+    _status_all_present(monkeypatch)
+
+    assert cli.main(["status"]) == 0
+
+    out = capsys.readouterr().out
+    for row in STATUS_ROWS:
+        assert f"[ OK ]  {row}" in out
+    assert "[MISS]" not in out
+    assert "All required software is present." in out
+    assert "All components in place." in out
+    assert "conda install" not in out and "apt-get install" not in out
+
+
+def test_status_missing_component_exits_one_and_names_its_fix(capsys, monkeypatch):
+    _status_all_present(monkeypatch)
+    monkeypatch.setattr(cli, "_is_fifo", lambda p: p != "/run/voice/speaker.fifo")
+
+    assert cli.main(["status"]) == 1
+
+    out = capsys.readouterr().out
+    assert "[MISS]  speaker FIFO /run/voice/speaker.fifo" in out
+    assert "speaker FIFO /run/voice/speaker.fifo:" in out
+    assert "created by module-pipe-sink: jupyterlab_audio start" in out
+    assert "Some components are missing (see above)." in out
+
+
+def test_status_reports_missing_distribution_metadata(capsys, monkeypatch):
+    _status_all_present(monkeypatch)
+    monkeypatch.setattr(
+        cli,
+        "_distribution_check",
+        lambda: (
+            "distribution jupyterlab_audio_extension (metadata unavailable)",
+            False,
+            "pip install jupyterlab-audio-extension",
+        ),
+    )
+
+    assert cli.main(["status"]) == 1
+
+    out = capsys.readouterr().out
+    assert "[MISS]  distribution jupyterlab_audio_extension (metadata unavailable)" in out
+    assert "pip install jupyterlab-audio-extension" in out
+
+
+@pytest.mark.parametrize(
+    "missing, label, apt, conda",
+    [
+        (
+            "pulseaudio",
+            "pulseaudio",
+            "sudo apt-get install -y pulseaudio",
+            "conda install -c conda-forge pulseaudio",
+        ),
+        (
+            "pactl",
+            "pulseaudio-utils (pactl)",
+            "sudo apt-get install -y pulseaudio-utils",
+            "conda install -c conda-forge pulseaudio",
+        ),
+        (
+            "rec",
+            "sox (rec)",
+            "sudo apt-get install -y sox",
+            "conda install -c conda-forge sox",
+        ),
+    ],
+)
+def test_status_missing_package_prints_apt_and_conda_examples(
+    capsys, monkeypatch, missing, label, apt, conda
+):
+    _status_all_present(monkeypatch)
+    monkeypatch.setattr(
+        cli.shutil, "which", lambda name: None if name == missing else "/usr/bin/" + name
+    )
+
+    assert cli.main(["status"]) == 1
+
+    out = capsys.readouterr().out
+    assert f"[MISS]  {label}" in out
+    assert f"apt:   {apt}" in out
+    assert f"conda: {conda}" in out
+    assert "conda-forge SoX lacks the PulseAudio driver" in " ".join(out.split())
+
+
+def test_status_missing_sox_driver_prints_examples_and_the_caveat(capsys, monkeypatch):
+    _status_all_present(monkeypatch)
+    monkeypatch.setattr(cli, "_sox_has_pulse", lambda: False)
+
+    assert cli.main(["status"]) == 1
+
+    out = capsys.readouterr().out
+    assert "[MISS]  libsox-fmt-pulse (SoX PulseAudio driver)" in out
+    assert "apt:   sudo apt-get install -y libsox-fmt-pulse" in out
+    assert "conda: conda install -c conda-forge sox" in out
+    assert "conda-forge SoX lacks the PulseAudio driver" in " ".join(out.split())
+
+
+def test_status_json_carries_the_same_rows_and_examples(capsys, monkeypatch):
+    _status_all_present(monkeypatch)
+    monkeypatch.setattr(cli, "_sox_has_pulse", lambda: False)
+
+    rc = cli.main(["status", "--json"])
+    out = capsys.readouterr().out
+    data = json.loads(out)
+
+    assert rc == 1
+    assert data["ok"] is False
+    assert data["sink_path"] == "/run/voice/pulseaudio.fifo"
+    assert data["distribution"] == {
+        "name": "distribution jupyterlab_audio_extension 9.9.9",
+        "ok": True,
+        "fix": None,
+    }
+    assert [row["name"] for row in data["software"]] == [
+        "pulseaudio",
+        "pulseaudio-utils (pactl)",
+        "sox (rec)",
+        "libsox-fmt-pulse (SoX PulseAudio driver)",
+    ]
+    driver = next(row for row in data["software"] if not row["ok"])
+    assert driver["apt"] == "sudo apt-get install -y libsox-fmt-pulse"
+    assert driver["conda"] == "conda install -c conda-forge sox"
+    assert all(row["apt"].startswith("sudo apt-get install -y ") for row in data["software"])
+    assert all(row["conda"].startswith("conda install -c conda-forge ") for row in data["software"])
+    assert [row["name"] for row in data["checks"]] == [
+        "runtime dir /run/voice",
+        "FIFO /run/voice/pulseaudio.fifo",
+        "PulseAudio daemon reachable",
+        "source 'voicein' connected",
+        "default source is 'voicein'",
+        "speaker FIFO /run/voice/speaker.fifo",
+        "sink 'voiceout' connected",
+        "default sink is 'voiceout'",
+        "default-server in client.conf",
+        "AUDIODRIVER=pulseaudio in this env",
+    ]
+    assert all(row["ok"] for row in data["checks"])
+    assert "\x1b[" not in out
+
+
+def test_pactl_pins_pulse_server_to_the_cli_socket_only_when_asked(monkeypatch):
+    envs = []
+
+    def fake_run(cmd, **kwargs):
+        envs.append(kwargs["env"])
+        return cli.subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.delenv("PULSE_SERVER", raising=False)
+    monkeypatch.setattr(cli.subprocess, "run", fake_run)
+
+    cli._pactl("info", pin_server=True)
+    cli._pactl("info")
+
+    assert envs[0]["PULSE_SERVER"] == f"unix:{cli.PULSE_SOCKET}"
+    assert "PULSE_SERVER" not in envs[1]
+
+
+def test_status_help_and_the_top_level_help_list_the_command(capsys):
+    assert "{install,validate,status,start,stop,player}" in _help(capsys)
+
+    out = _help(capsys, "status")
+    assert "examples:\n  jupyterlab_audio status" in out
+    assert "jupyterlab_audio status --json" in out
+
+
 def _record_runs(monkeypatch):
     """Record the commands start would run, without running any of them or querying a
     daemon."""
@@ -823,6 +1044,48 @@ def test_player_token_precedence(tmp_path, capsys, monkeypatch, environment, exp
     assert seen[-1].get_header("Authorization") == f"token {expected}"
     out, err = capsys.readouterr()
     assert expected not in out and expected not in err
+
+
+def test_player_refuses_several_matching_records_with_environment_base(capsys, monkeypatch):
+    # JUPYTER_SERVER_URL names the lab, but two matching records make the token ambiguous.
+    monkeypatch.setenv("JUPYTER_SERVER_URL", "http://127.0.0.1:8899")
+    monkeypatch.setenv("JUPYTER_SERVER_ROOT", "/work")
+    monkeypatch.setattr(
+        cli,
+        "_server_records",
+        lambda: [
+            _record(8899, "/", root_dir="/work", token="first-token"),
+            _record(8898, "/", root_dir="/work", token="second-token"),
+        ],
+    )
+    seen = _capture(monkeypatch)
+
+    assert cli.main(["player", "status"]) == 1
+
+    out, err = capsys.readouterr()
+    assert seen == []
+    assert out == ""
+    assert "several running Jupyter servers match" in err
+
+
+def test_player_environment_base_without_matching_record_sends_no_token(monkeypatch):
+    # The environment base stands alone; no matching record leaves the POST untokened.
+    monkeypatch.setenv("JUPYTER_SERVER_URL", "http://127.0.0.1:8899")
+    monkeypatch.setenv("JUPYTER_SERVER_ROOT", "/work")
+    monkeypatch.setattr(
+        cli,
+        "_server_records",
+        lambda: [_record(9999, "/decoy/", root_dir="/elsewhere", token="decoy-token")],
+    )
+    seen = _capture(monkeypatch)
+
+    assert cli.main(["player", "status"]) == 0
+
+    assert (
+        seen[-1].full_url
+        == "http://127.0.0.1:8899/jupyterlab-audio-extension/player"
+    )
+    assert seen[-1].get_header("Authorization") is None
 
 
 class _PlayerRequestHandler(http.server.BaseHTTPRequestHandler):

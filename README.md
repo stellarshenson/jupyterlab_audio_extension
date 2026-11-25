@@ -60,6 +60,7 @@ Restart the Jupyter server, then hard-reload every open tab.
 jupyterlab_audio install    # apt packages + /run/voice dir + client.conf + Jupyter config line (does NOT start the daemon)
 jupyterlab_audio start -d   # start the PulseAudio daemon + pipe-source + voicedrain loopback that keeps it reading + voiceout pipe-sink as the default sink (run after install and each restart)
 jupyterlab_audio validate   # check every component, print what to fix (--json for machine output)
+jupyterlab_audio status     # read-only report: distribution, software with apt and conda examples, bridge rows (--json for machine output)
 jupyterlab_audio stop       # kill the PulseAudio daemon
 ```
 

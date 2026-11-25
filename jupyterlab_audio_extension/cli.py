@@ -14,6 +14,8 @@ Commands:
   stop      - kill the userspace PulseAudio daemon
   validate  - check every component is in place and print how to configure what is missing,
               including the AUDIODRIVER=pulseaudio setting the claude process needs
+  status    - print one read-only report: the installed distribution, the required software
+              with apt and conda examples for what is missing, and every bridge component
 """
 
 from __future__ import annotations
@@ -98,11 +100,15 @@ def _run(cmd, *, dry: bool = False, sudo: bool = False) -> int:
     return subprocess.run(cmd, env=_pulse_env()).returncode
 
 
-def _pactl(*args) -> tuple[int, str]:
+def _pactl(*args, pin_server: bool = False) -> tuple[int, str]:
+    env = _pulse_env()
+    if pin_server:
+        # status reads the CLI's socket, not a daemon autospawned from client.conf
+        env["PULSE_SERVER"] = env.get("PULSE_SERVER") or f"unix:{PULSE_SOCKET}"
     try:
         res = subprocess.run(
             ["pactl", *args],
-            env=_pulse_env(),
+            env=env,
             capture_output=True,
             text=True,
             timeout=10,
@@ -356,13 +362,15 @@ def cmd_install(args) -> int:
 # -------------------------------------------------------------------------- validate
 
 
-def cmd_validate(args) -> int:
-    sink = args.sink_path
+def _component_checks(sink: str, *, pin_server: bool = False) -> list:
+    """The rows after the package checks: the runtime dir, both FIFOs, the daemon, its
+    source and sink with the defaults, client.conf and AUDIODRIVER."""
     sink_dir = os.path.dirname(sink) or "/"
     speaker = os.path.join(os.path.dirname(sink), SPEAKER_FIFO_NAME)
-    rc_info, info = _pactl("info")
-    _, sources = _pactl("list", "short", "sources")
-    _, sinks = _pactl("list", "short", "sinks")
+    pin = {"pin_server": True} if pin_server else {}
+    rc_info, info = _pactl("info", **pin)
+    _, sources = _pactl("list", "short", "sources", **pin)
+    _, sinks = _pactl("list", "short", "sinks", **pin)
 
     default_source = ""
     default_sink = ""
@@ -377,8 +385,7 @@ def cmd_validate(args) -> int:
     fifo_ok = _is_fifo(sink)
     speaker_ok = _is_fifo(speaker)
 
-    checks = [
-        *_package_checks(),
+    return [
         (f"runtime dir {sink_dir}", os.path.isdir(sink_dir),
          f"sudo install -d -m 0755 -o $(id -un) -g $(id -gn) {sink_dir}"),
         (f"FIFO {sink}", fifo_ok,
@@ -400,6 +407,11 @@ def cmd_validate(args) -> int:
         ("AUDIODRIVER=pulseaudio in this env", os.environ.get("AUDIODRIVER") == "pulseaudio",
          "export AUDIODRIVER=pulseaudio  (must be set in the claude process)"),
     ]
+
+
+def cmd_validate(args) -> int:
+    sink = args.sink_path
+    checks = [*_package_checks(), *_component_checks(sink)]
 
     missing = [(label, fix) for label, ok, fix in checks if not ok]
     ok_all = not missing
@@ -445,6 +457,115 @@ def cmd_validate(args) -> int:
     else:
         print("\n" + _c("Some components are missing (see above).", "yellow"))
     return 0 if ok_all else 1
+
+
+# --------------------------------------------------------------------------- status
+
+# Required system packages: (row label, apt package, conda package), in _package_checks order.
+SOFTWARE = [
+    ("pulseaudio", "pulseaudio", "pulseaudio"),
+    ("pulseaudio-utils (pactl)", "pulseaudio-utils", "pulseaudio"),
+    ("sox (rec)", "sox", "sox"),
+    ("libsox-fmt-pulse (SoX PulseAudio driver)", "libsox-fmt-pulse", "sox"),
+]
+
+
+def _distribution_check() -> tuple:
+    """(row label, present, fix) for the installed distribution and its metadata version."""
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        return (
+            f"distribution jupyterlab_audio_extension {version('jupyterlab_audio_extension')}",
+            True,
+            "",
+        )
+    except PackageNotFoundError:
+        return (
+            "distribution jupyterlab_audio_extension (metadata unavailable)",
+            False,
+            "pip install jupyterlab-audio-extension",
+        )
+
+
+def _software_rows() -> list:
+    """(label, present, apt example, conda example) per package; _package_checks and
+    SOFTWARE are in the same order."""
+    return [
+        (label, ok, f"sudo apt-get install -y {apt}", f"conda install -c conda-forge {conda}")
+        for (label, apt, conda), (_check, ok, _fix) in zip(SOFTWARE, _package_checks())
+    ]
+
+
+def cmd_status(args) -> int:
+    sink = args.sink_path
+    distribution = _distribution_check()
+    software = _software_rows()
+    checks = _component_checks(sink, pin_server=True)
+
+    missing_software = [row for row in software if not row[1]]
+    missing = [(label, fix) for label, ok, fix in checks if not ok]
+    if not distribution[1]:
+        missing.insert(0, (distribution[0], distribution[2]))
+    ok_all = not missing and not missing_software
+
+    if args.json:
+        _color(False)
+        payload = {
+            "ok": ok_all,
+            "sink_path": sink,
+            "distribution": {
+                "name": distribution[0],
+                "ok": distribution[1],
+                "fix": None if distribution[1] else distribution[2],
+            },
+            "software": [
+                {"name": label, "ok": ok, "apt": apt, "conda": conda}
+                for label, ok, apt, conda in software
+            ],
+            "checks": [
+                {"name": label, "ok": ok, "fix": None if ok else fix}
+                for label, ok, fix in checks
+            ],
+        }
+        print(json.dumps(payload, indent=2))
+        return 0 if ok_all else 1
+
+    print("Audio extension status\n")
+    print(f"  {_ok() if distribution[1] else _miss()}  {distribution[0]}")
+    print("\nRequired software")
+    for label, ok, _apt, _conda in software:
+        print(f"  {_ok() if ok else _miss()}  {label}")
+    if missing_software:
+        print("\n" + _c("How to install what is missing:", "yellow"))
+        for label, _present, apt, conda in missing_software:
+            print(f"  - {label}:")
+            print(f"      apt:   {apt}")
+            print(f"      conda: {conda}")
+        print(
+            "\n  conda-forge SoX lacks the PulseAudio driver; install sox and\n"
+            "  libsox-fmt-pulse with apt. The stack is installed with apt and these\n"
+            "  conda lines are for reference; a conda pulseaudio can start a second\n"
+            "  daemon that masks the bridge."
+        )
+    else:
+        print("\n" + _c("All required software is present.", "green"))
+
+    print("\nAudio bridge")
+    for label, ok, _fix in checks:
+        print(f"  {_ok() if ok else _miss()}  {label}")
+
+    if missing:
+        print("\n" + _c("How to fix what is missing:", "yellow"))
+        for label, fix in missing:
+            print(f"  - {label}:")
+            print(f"      {fix}")
+    if missing or missing_software:
+        print("\n" + _c("Some components are missing (see above).", "yellow"))
+        return 1
+
+    print("\n" + _c("All components in place.", "green"))
+    return 0
 
 
 # ----------------------------------------------------------------------- start / stop
@@ -744,13 +865,14 @@ def main(argv=None) -> int:
         "(PulseAudio + SoX bridge for the FIFO the extension writes).",
         epilog="exit codes:\n"
         "  0  success\n"
-        "  1  validate found a missing component, start did not load voicein or voiceout,\n"
-        "     stop failed, or a command that install runs failed, or install found a\n"
-        "     required package missing and no apt-get on PATH, or a player request was\n"
-        "     refused or the server was unreachable\n"
+        "  1  validate found a missing component, status found a missing row, start did not\n"
+        "     load voicein or voiceout, stop failed, or a command that install runs failed,\n"
+        "     or install found a required package missing and no apt-get on PATH, or a\n"
+        "     player request was refused or the server was unreachable\n"
         "  2  unknown command or flag (usage)\n"
         "\n"
-        "stop kills the PulseAudio daemon; player stop ends playback and leaves the daemon.\n"
+        "stop kills the PulseAudio daemon; player stop ends playback and leaves the daemon;\n"
+        "status only reads and changes nothing.\n"
         "\n"
         "environment:\n"
         "  NO_COLOR, TERM  no status colour when NO_COLOR is set, TERM is dumb or the output\n"
@@ -803,6 +925,29 @@ def main(argv=None) -> int:
         "--json", action="store_true", help="emit the component check as JSON (no colour)"
     )
     p_validate.set_defaults(func=cmd_validate)
+
+    p_status = sub.add_parser(
+        "status",
+        help="print a read-only report of the distribution and the audio bridge",
+        description="Print one read-only report and change nothing: the installed distribution and\n"
+        "its version, the required software with an example apt and conda command for each\n"
+        "missing package, the runtime dir, the sink and speaker FIFOs, the PulseAudio daemon,\n"
+        "the voicein source and voiceout sink with the default source and sink, default-server\n"
+        "in /etc/pulse/client.conf and AUDIODRIVER=pulseaudio. Prints [ OK ] or [MISS] per row\n"
+        "and how to fix each missing one. Exits 1 when a row is missing; --json prints the\n"
+        "same report as JSON.",
+        epilog="examples:\n"
+        "  jupyterlab_audio status\n"
+        "  jupyterlab_audio status --json",
+        formatter_class=raw,
+    )
+    p_status.add_argument(
+        "--sink-path", default=DEFAULT_SINK_PATH, help="FIFO path (default: %(default)s)"
+    )
+    p_status.add_argument(
+        "--json", action="store_true", help="emit the report as JSON (no colour)"
+    )
+    p_status.set_defaults(func=cmd_status)
 
     p_start = sub.add_parser(
         "start",
