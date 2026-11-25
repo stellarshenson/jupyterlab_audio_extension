@@ -122,23 +122,25 @@ def _paths(state, key):
     return [entry["path"] for entry in state[key]]
 
 
-def _wait_for(check):
+def _wait_for(check, timeout=2.0):
     """Poll until the monitor threads have done their work."""
-    deadline = time.monotonic() + 2.0
+    deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         value = check()
         if value:
             return value
         time.sleep(0.01)
-    raise AssertionError("the player did not reach the expected state in 2 s")
+    raise AssertionError(
+        f"the player did not reach the expected state in {timeout:g} s"
+    )
 
 
-def _wait_paths(player, key, expected):
+def _wait_paths(player, key, expected, timeout=2.0):
     def check():
         state = player.status()
         return state if _paths(state, key) == expected else None
 
-    return _wait_for(check)
+    return _wait_for(check, timeout)
 
 
 def test_play_queues_and_starts_the_next_file_in_order(tmp_path):
@@ -519,5 +521,39 @@ def test_paplay_plays_a_real_file_and_the_state_follows_it(pulse_server, tmp_pat
         stopped = player.stop()
         assert stopped["playing"] == []
         assert stopped["queue"] == []
+    finally:
+        player.close()
+
+
+def test_paplay_mixes_two_now_files_and_advances_the_queue(pulse_server, tmp_path):
+    # The real engine against the isolated daemon: two tones started with mode now play
+    # as two live paplay processes at once, and the queued tone starts once they end.
+    assert os.environ["PULSE_SERVER"] == pulse_server
+    a, b, c = (tmp_path / name for name in ("a.wav", "b.wav", "c.wav"))
+    for tone in (a, b, c):
+        _tone(tone, seconds=0.5)
+
+    spawned = []
+
+    def spawn(argv, **kwargs):
+        process = subprocess.Popen(argv, **kwargs)
+        spawned.append(process)
+        return process
+
+    player = Player(str(tmp_path), spawn=spawn)
+    try:
+        player.play("a.wav")
+        state = player.play("b.wav", mode="now")
+        assert _paths(state, "playing") == [str(a), str(b)]
+        assert [process.poll() for process in spawned] == [None, None]  # both live
+
+        state = player.play("c.wav")
+        assert _paths(state, "playing") == [str(a), str(b)]
+        assert _paths(state, "queue") == [str(c)]
+
+        # The daemon drains each stream with a fixed tail, so allow a few seconds.
+        state = _wait_paths(player, "playing", [str(c)], timeout=5.0)
+        assert state["queue"] == []
+        assert spawned[0].poll() is not None  # the queue advanced only once a ended
     finally:
         player.close()

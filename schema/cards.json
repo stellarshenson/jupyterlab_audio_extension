@@ -1,0 +1,47 @@
+{
+  "jupyter.lab.setting-icon": "audio:mic",
+  "jupyter.lab.setting-icon-label": "Audio Settings Panel",
+  "title": "Audio Settings Panel",
+  "description": "Cards in the panel that the gear of the status-bar audio pill opens.",
+  "jupyter.lab.toolbars": {
+    "AudioSettings": []
+  },
+  "jupyter.lab.transform": true,
+  "type": "object",
+  "properties": {
+    "toolbar": {
+      "title": "Audio settings panel cards",
+      "description": "Cards in the audio settings panel, after the audio card, in rank order. Other extensions add them through \"jupyter.lab.toolbars\" -> \"AudioSettings\" in their own settings schema. To hide a card, copy it to User Preferences and add \"disabled\": true.",
+      "items": {
+        "$ref": "#/definitions/card"
+      },
+      "type": "array",
+      "default": []
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "card": {
+      "properties": {
+        "name": {
+          "title": "Unique name",
+          "type": "string"
+        },
+        "disabled": {
+          "title": "Whether the card is ignored or not",
+          "type": "boolean",
+          "default": false
+        },
+        "rank": {
+          "title": "Card rank",
+          "type": "number",
+          "minimum": 0,
+          "default": 50
+        }
+      },
+      "required": ["name"],
+      "additionalProperties": true,
+      "type": "object"
+    }
+  }
+}

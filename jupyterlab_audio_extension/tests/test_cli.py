@@ -1,5 +1,11 @@
+import ast
+import http.server
 import json
 import os
+import pathlib
+import socket
+import sys
+import threading
 import time
 
 import pytest
@@ -492,10 +498,16 @@ def test_help_lists_the_exit_codes(capsys):
     assert "exit codes:" in out
     for code in ("0  success", "1  validate found", "2  unknown command"):
         assert f"\n  {code}" in out
+    flat = " ".join(out.split())
     assert (
         "a command that install runs failed, or install found a required package missing and no "
-        "apt-get on PATH" in " ".join(out.split())
+        "apt-get on PATH" in flat
     )
+    # ACC-PLAYER-103: the player path adds refused, unreachable and usage exits.
+    assert "a player request was refused or the server was unreachable" in flat
+    assert "unknown command or flag (usage)" in flat
+    assert "stop kills the PulseAudio daemon" in flat
+    assert "player stop ends playback" in flat
 
 
 def test_help_names_the_environment_variables_it_reads(capsys):
@@ -511,6 +523,10 @@ def test_help_names_the_environment_variables_it_reads(capsys):
         ("validate", ["Exits 1 when a component is missing"]),
         ("start", ["the microphone source voicein", "the speaker sink voiceout"]),
         ("stop", ["Kill the PulseAudio daemon", "cannot be undone without start"]),
+        (
+            "player",
+            ["play, pause, resume, stop, clear and status", "player stop ends playback"],
+        ),
     ],
 )
 def test_command_help_says_what_it_does_and_shows_examples(capsys, command, says):
@@ -519,3 +535,555 @@ def test_command_help_says_what_it_does_and_shows_examples(capsys, command, says
     for phrase in says:
         assert phrase in flat
     assert f"examples:\n  jupyterlab_audio {command}" in out
+
+
+# ------------------------------------------------------------------- player CLI (HTTP)
+
+_JUPYTER_VARS = (
+    "JUPYTER_SERVER_URL",
+    "JUPYTER_SERVER_ROOT",
+    "JUPYTERHUB_SERVICE_PREFIX",
+    "JUPYTER_PORT",
+    "JUPYTERHUB_API_TOKEN",
+    "JPY_API_TOKEN",
+    "JUPYTER_TOKEN",
+)
+
+_STATE = {
+    "paused": False,
+    "stopped": False,
+    "playing": [{"id": 1, "path": "/work/a.wav", "position_s": 1.5}],
+    "queue": [{"id": 2, "path": "/work/b.wav"}],
+    "sink": {"state": "ready"},
+    "capture": "/run/voice/pulseaudio.fifo",
+}
+
+
+@pytest.fixture(autouse=True)
+def _clear_jupyter_environment(monkeypatch):
+    """No test may inherit the workstation's lab address or token."""
+    for name in _JUPYTER_VARS:
+        monkeypatch.delenv(name, raising=False)
+
+
+def _record(port, base_url="/", root_dir="/work", token="record-token", secure=False):
+    return {
+        "port": port,
+        "base_url": base_url,
+        "root_dir": root_dir,
+        "token": token,
+        "secure": secure,
+    }
+
+
+def _fake_jupyter(tmp_path, monkeypatch, records=(), exit_code=0):
+    """Put a fake `jupyter` first on PATH, so discovery never reaches the live lab."""
+    bindir = tmp_path / "bin"
+    bindir.mkdir(exist_ok=True)
+    script = bindir / "jupyter"
+    lines = "\n".join(json.dumps(record) for record in records)
+    script.write_text(
+        "#!/bin/sh\ncat <<'EOF'\n" + lines + ("\n" if lines else "") + "EOF\nexit "
+        + str(exit_code) + "\n"
+    )
+    script.chmod(0o755)
+    monkeypatch.setenv("PATH", str(bindir) + os.pathsep + os.environ.get("PATH", ""))
+    return bindir
+
+
+def _capture(monkeypatch, payload=None):
+    """Record the request the CLI builds instead of sending it; return the recorded list."""
+    seen = []
+    text = json.dumps(_STATE if payload is None else payload)
+
+    def fake_open(request):
+        seen.append(request)
+        return text
+
+    monkeypatch.setattr(cli, "_open", fake_open)
+    return seen
+
+
+def _env_url_and_token(monkeypatch, base="http://127.0.0.1:8888"):
+    monkeypatch.setenv("JUPYTER_SERVER_URL", base)
+    monkeypatch.setenv("JUPYTER_TOKEN", "env-token")
+
+
+@pytest.mark.parametrize(
+    "argv, body",
+    [
+        (["player", "play", "a.wav"], {"action": "play", "path": "a.wav", "mode": "queue"}),
+        (["player", "play", "a.wav", "--now"], {"action": "play", "path": "a.wav", "mode": "now"}),
+        (["player", "pause"], {"action": "pause"}),
+        (["player", "resume"], {"action": "resume"}),
+        (["player", "stop"], {"action": "stop"}),
+        (["player", "clear"], {"action": "clear"}),
+        (["player", "status"], {"action": "status"}),
+    ],
+)
+def test_player_each_action_posts_its_url_header_and_body(monkeypatch, argv, body):
+    _env_url_and_token(monkeypatch)
+    seen = _capture(monkeypatch)
+
+    assert cli.main(argv) == 0
+
+    request = seen[-1]
+    assert request.get_method() == "POST"
+    assert request.full_url == "http://127.0.0.1:8888/jupyterlab-audio-extension/player"
+    assert request.get_header("Authorization") == "token env-token"
+    assert json.loads(request.data) == body
+
+
+@pytest.mark.parametrize(
+    "base, path",
+    [
+        ("http://127.0.0.1:8888/user/alice/", "/user/alice/jupyterlab-audio-extension/player"),
+        ("http://127.0.0.1:8888", "/jupyterlab-audio-extension/player"),
+        ("http://127.0.0.1:8888/", "/jupyterlab-audio-extension/player"),
+    ],
+)
+def test_player_url_keeps_the_hub_prefix_and_uses_one_slash(monkeypatch, base, path):
+    _env_url_and_token(monkeypatch, base)
+    seen = _capture(monkeypatch)
+
+    assert cli.main(["player", "status"]) == 0
+
+    after_authority = seen[-1].full_url.split("://", 1)[1]
+    assert after_authority == "127.0.0.1:8888" + path
+    assert "//" not in after_authority
+
+
+def test_player_discovery_prefers_jupyter_server_url(tmp_path, monkeypatch):
+    # The decoy record is a different port and token, and the fake jupyter fails: a CLI
+    # that consults it instead of the environment URL fails this test.
+    _env_url_and_token(monkeypatch, "http://127.0.0.1:7777/user/alice/")
+    _fake_jupyter(
+        tmp_path, monkeypatch, [_record(9999, "/decoy/", token="decoy-token")], exit_code=1
+    )
+    seen = _capture(monkeypatch)
+
+    assert cli.main(["player", "status"]) == 0
+
+    assert (
+        seen[-1].full_url
+        == "http://127.0.0.1:7777/user/alice/jupyterlab-audio-extension/player"
+    )
+    assert seen[-1].get_header("Authorization") == "token env-token"
+
+
+def test_player_discovers_the_single_server_matching_the_root(tmp_path, monkeypatch):
+    # A dead decoy record comes first; only the record whose root_dir matches is the lab.
+    monkeypatch.setenv("JUPYTER_SERVER_ROOT", "/work")
+    _fake_jupyter(
+        tmp_path,
+        monkeypatch,
+        [
+            _record(9, "/dead/", root_dir="/somewhere-else", token=""),
+            _record(8899, "/user/bob/", root_dir="/work", token="record-token"),
+        ],
+    )
+    seen = _capture(monkeypatch)
+
+    assert cli.main(["player", "status"]) == 0
+
+    assert (
+        seen[-1].full_url
+        == "http://127.0.0.1:8899/user/bob/jupyterlab-audio-extension/player"
+    )
+    assert seen[-1].get_header("Authorization") == "token record-token"
+
+
+@pytest.mark.parametrize("secure, scheme", [(False, "http"), (True, "https")])
+def test_player_record_base_honours_secure(tmp_path, monkeypatch, secure, scheme):
+    _fake_jupyter(tmp_path, monkeypatch, [_record(8899, "/user/bob/", secure=secure)])
+    seen = _capture(monkeypatch)
+
+    assert cli.main(["player", "status"]) == 0
+
+    assert (
+        seen[-1].full_url
+        == f"{scheme}://127.0.0.1:8899/user/bob/jupyterlab-audio-extension/player"
+    )
+
+
+def test_player_refuses_several_servers(tmp_path, capsys, monkeypatch):
+    _fake_jupyter(
+        tmp_path,
+        monkeypatch,
+        [
+            _record(9999, "/decoy/", token=""),
+            _record(8899, "/user/bob/", token="other-token"),
+        ],
+    )
+    seen = _capture(monkeypatch)
+
+    assert cli.main(["player", "status"]) == 1
+
+    out, err = capsys.readouterr()
+    assert seen == []  # no HTTP request after a discovery refusal
+    assert out == ""
+    assert "9999/decoy/" in err and "8899/user/bob/" in err
+    assert "(no token)" in err
+
+
+def test_player_refuses_when_no_record_matches_the_root(tmp_path, capsys, monkeypatch):
+    monkeypatch.setenv("JUPYTER_SERVER_ROOT", "/work")
+    _fake_jupyter(
+        tmp_path, monkeypatch, [_record(9999, "/decoy/", root_dir="/elsewhere")]
+    )
+    seen = _capture(monkeypatch)
+
+    assert cli.main(["player", "status"]) == 1
+
+    out, err = capsys.readouterr()
+    assert seen == []
+    assert out == ""
+    assert "9999/decoy/" in err
+
+
+def test_player_no_server_found_exits_1(tmp_path, capsys, monkeypatch):
+    _fake_jupyter(tmp_path, monkeypatch, [])
+    seen = _capture(monkeypatch)
+
+    assert cli.main(["player", "status"]) == 1
+
+    out, err = capsys.readouterr()
+    assert seen == []
+    assert out == ""
+    assert "Running: none" in err
+
+
+def test_player_server_list_failure_exits_1(tmp_path, capsys, monkeypatch):
+    _fake_jupyter(tmp_path, monkeypatch, [], exit_code=3)
+    seen = _capture(monkeypatch)
+
+    assert cli.main(["player", "status"]) == 1
+
+    out, err = capsys.readouterr()
+    assert seen == []
+    assert out == ""
+    assert "jupyter server list" in err
+
+
+def test_player_missing_jupyter_command_exits_1(tmp_path, capsys, monkeypatch):
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    monkeypatch.setenv("PATH", str(bindir))
+    _capture(monkeypatch)
+
+    assert cli.main(["player", "status"]) == 1
+
+    out, err = capsys.readouterr()
+    assert out == ""
+    assert "jupyter server list" in err
+
+
+def test_player_server_list_timeout_exits_1(capsys, monkeypatch):
+    def timing_out(*args, **kwargs):
+        raise cli.subprocess.TimeoutExpired(cmd=args[0], timeout=5)
+
+    monkeypatch.setattr(cli.subprocess, "run", timing_out)
+    _capture(monkeypatch)
+
+    assert cli.main(["player", "status"]) == 1
+
+    out, err = capsys.readouterr()
+    assert out == ""
+    assert "jupyter server list" in err
+
+
+@pytest.mark.parametrize(
+    "environment, expected",
+    [
+        (
+            {
+                "JUPYTERHUB_API_TOKEN": "hub-token",
+                "JPY_API_TOKEN": "jpy-token",
+                "JUPYTER_TOKEN": "jwt-token",
+            },
+            "hub-token",
+        ),
+        ({"JPY_API_TOKEN": "jpy-token", "JUPYTER_TOKEN": "jwt-token"}, "jpy-token"),
+        ({"JUPYTER_TOKEN": "jwt-token"}, "jwt-token"),
+        ({}, "record-token"),
+    ],
+)
+def test_player_token_precedence(tmp_path, capsys, monkeypatch, environment, expected):
+    monkeypatch.setenv("JUPYTER_SERVER_URL", "http://127.0.0.1:8899")
+    monkeypatch.setenv("JUPYTER_SERVER_ROOT", "/work")
+    for name, value in environment.items():
+        monkeypatch.setenv(name, value)
+    _fake_jupyter(
+        tmp_path, monkeypatch, [_record(8899, "/", root_dir="/work", token="record-token")]
+    )
+    seen = _capture(monkeypatch)
+
+    assert cli.main(["player", "status"]) == 0
+
+    assert seen[-1].get_header("Authorization") == f"token {expected}"
+    out, err = capsys.readouterr()
+    assert expected not in out and expected not in err
+
+
+class _PlayerRequestHandler(http.server.BaseHTTPRequestHandler):
+    def do_POST(self):
+        length = int(self.headers.get("Content-Length") or 0)
+        body = self.rfile.read(length)
+        self.server.requests.append(
+            {"path": self.path, "body": body, "auth": self.headers.get("Authorization")}
+        )
+        status, text, content_type = self.server.responder(self)
+        self.server.replies.append(text)
+        data = text.encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def log_message(self, *args):
+        pass  # a test server writes no access log
+
+
+class _FakePlayerServer(http.server.ThreadingHTTPServer):
+    def __init__(self, responder):
+        super().__init__(("127.0.0.1", 0), _PlayerRequestHandler)
+        self.responder = responder
+        self.requests = []
+        self.replies = []
+
+
+@pytest.fixture
+def player_server(monkeypatch):
+    """A local HTTP stand-in for the player route, with a fake token and a fixed state."""
+
+    def accept(handler):
+        if handler.headers.get("Authorization") != "token test-token":
+            return 403, json.dumps({"message": "Authentication required"}), "application/json"
+        return 200, json.dumps(_STATE, indent=2), "application/json"
+
+    server = _FakePlayerServer(accept)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    monkeypatch.setenv(
+        "JUPYTER_SERVER_URL", f"http://127.0.0.1:{server.server_address[1]}"
+    )
+    monkeypatch.setenv("JUPYTER_TOKEN", "test-token")
+    try:
+        yield server
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_player_against_a_local_http_server(player_server, capsys):
+    calls = [
+        (["player", "play", "a.wav"], {"action": "play", "path": "a.wav", "mode": "queue"}),
+        (["player", "play", "a.wav", "--now"], {"action": "play", "path": "a.wav", "mode": "now"}),
+        (["player", "pause"], {"action": "pause"}),
+        (["player", "resume"], {"action": "resume"}),
+        (["player", "stop"], {"action": "stop"}),
+        (["player", "clear"], {"action": "clear"}),
+        (["player", "status"], {"action": "status"}),
+    ]
+
+    for argv, _body in calls:
+        assert cli.main(argv) == 0
+        assert capsys.readouterr().out == (
+            "playing 1 queue 1 paused no stopped no sink ready\n"
+        )
+
+    assert [json.loads(entry["body"]) for entry in player_server.requests] == [
+        body for _argv, body in calls
+    ]
+    assert all(
+        entry["path"] == "/jupyterlab-audio-extension/player"
+        for entry in player_server.requests
+    )
+    assert all(entry["auth"] == "token test-token" for entry in player_server.requests)
+
+
+def test_player_status_json_prints_the_route_object_verbatim(player_server, capsys):
+    assert cli.main(["player", "status", "--json"]) == 0
+
+    out = capsys.readouterr().out
+    assert out == player_server.replies[-1] + "\n"
+    assert json.loads(out) == _STATE
+    assert "\x1b[" not in out
+
+
+def test_player_400_refusal_prints_the_server_message_and_exits_1(player_server, capsys):
+    player_server.responder = lambda handler: (
+        400,
+        json.dumps({"message": "Cannot play a.wav: no such file"}),
+        "application/json",
+    )
+
+    assert cli.main(["player", "play", "a.wav"]) == 1
+
+    out, err = capsys.readouterr()
+    assert out == ""
+    assert "Cannot play a.wav: no such file" in err
+
+
+@pytest.mark.parametrize(
+    "status, body, said",
+    [
+        (400, '{"reason": "no such file"}', "no such file"),
+        (400, "<html><body>Bad Request</body></html>", "HTTP 400 Bad Request"),
+    ],
+)
+def test_player_http_error_falls_back_to_reason_then_http_status(
+    player_server, capsys, status, body, said
+):
+    player_server.responder = lambda handler: (
+        status,
+        body,
+        "application/json" if body.startswith("{") else "text/html",
+    )
+
+    assert cli.main(["player", "status"]) == 1
+
+    out, err = capsys.readouterr()
+    assert out == ""
+    assert said in err
+
+
+def test_player_403_exits_1_without_printing_the_token(player_server, capsys):
+    player_server.responder = lambda handler: (
+        403,
+        json.dumps({"message": "Authentication required"}),
+        "application/json",
+    )
+
+    assert cli.main(["player", "status"]) == 1
+
+    out, err = capsys.readouterr()
+    assert "Authentication" in err
+    assert "test-token" not in out and "test-token" not in err
+
+
+def test_player_unreachable_server_exits_1(capsys, monkeypatch):
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    base = f"http://127.0.0.1:{port}"
+    _env_url_and_token(monkeypatch, base)
+
+    assert cli.main(["player", "status"]) == 1
+
+    out, err = capsys.readouterr()
+    assert out == ""
+    assert base in err
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["player"],
+        ["player", "play"],
+        ["player", "play", "a.wav", "extra"],
+        ["player", "play", "a.wav", "--nope"],
+        ["player", "pause", "--now"],
+    ],
+)
+def test_player_usage_exits_2(capsys, argv):
+    with pytest.raises(SystemExit) as exited:
+        cli.main(argv)
+    assert exited.value.code == 2
+
+
+@pytest.mark.parametrize(
+    "state, line",
+    [
+        (
+            {
+                "paused": False,
+                "stopped": False,
+                "playing": [{"id": 1}],
+                "queue": [{"id": 2}],
+                "sink": {"state": "ready"},
+            },
+            "playing 1 queue 1 paused no stopped no sink ready",
+        ),
+        (
+            {
+                "paused": True,
+                "stopped": True,
+                "playing": [{"id": 1}],
+                "queue": [],
+                "sink": {"state": "off"},
+            },
+            "playing 1 queue 0 paused yes stopped yes sink off",
+        ),
+    ],
+)
+def test_player_summary_is_one_line(monkeypatch, capsys, state, line):
+    _env_url_and_token(monkeypatch)
+    _capture(monkeypatch, state)
+
+    assert cli.main(["player", "status"]) == 0
+
+    assert capsys.readouterr().out == line + "\n"
+
+
+@pytest.mark.parametrize("path", ["a.wav", "../a.wav", "/tmp/a.wav"])
+def test_player_does_not_resolve_the_path(monkeypatch, path):
+    _env_url_and_token(monkeypatch)
+    seen = _capture(monkeypatch)
+
+    assert cli.main(["player", "play", path]) == 0
+
+    assert json.loads(seen[-1].data)["path"] == path
+
+
+def test_player_stop_and_top_level_stop_are_distinct(monkeypatch):
+    _env_url_and_token(monkeypatch)
+    seen = _capture(monkeypatch)
+
+    def never(_args=None):
+        raise AssertionError("player stop must not kill the PulseAudio daemon")
+
+    monkeypatch.setattr(cli, "_stop_daemon", never)
+
+    assert cli.main(["player", "stop"]) == 0
+
+    assert json.loads(seen[-1].data) == {"action": "stop"}
+
+
+def test_cli_never_imports_the_player_and_never_names_paplay():
+    source = pathlib.Path(cli.__file__).read_text(encoding="utf-8")
+    tree = ast.parse(source)
+
+    assert "paplay" not in source
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            if node.level:
+                assert node.module == "speaker", node.module
+            else:
+                root = (node.module or "").split(".")[0]
+                assert root in sys.stdlib_module_names, root
+                assert root != "player"
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                root = alias.name.split(".")[0]
+                assert root in sys.stdlib_module_names, root
+                assert root != "player"
+
+
+def test_player_help_lists_every_action_with_an_example(capsys):
+    actions = ("play", "pause", "resume", "stop", "clear", "status")
+
+    out = _help(capsys, "player")
+    for action in actions:
+        assert action in out
+
+    for action in actions:
+        action_help = _help(capsys, "player", action)
+        assert "examples:" in action_help
+        assert f"jupyterlab_audio player {action}" in action_help
+
+    play_help = " ".join(_help(capsys, "player", "play").split())
+    assert "0.2 s" in play_help
+    assert "earliest queued file" in play_help

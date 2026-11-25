@@ -270,3 +270,19 @@ Server-side player and its transport state
   - root-cause: 2026-11-13T18:03:35Z @kj PlayerHandler.post was a plain method that called Player.play on the loop; play waits START_GRACE_S (0.2 s) on paplay to read a refusal
   - log: 2026-11-13T18:03:35Z @kj added
   - log: 2026-11-13T18:07:01Z @kj closed
+
+## Agent skill `AGENT`
+
+The shipped skill an AI assistant reads to play sound in the browser and run the CLI
+
+- log: 2026-11-24T18:12:56Z @kj category created
+
+- [x] `DEF-AGENT-25-CLI-QUEUE` **skill plays through paplay and the player command, not the CLI queue** - MAJOR; the skill plays sounds through `paplay` or `jupyterlab-commands execute audio:player`, not through the `jupyterlab_audio` CLI queue; the CLI has only install, start, stop and validate; fix: add a play command that posts to the player route and point the skill at it; `.agents/skills/jupyterlab-audio-extension/SKILL.md`, `jupyterlab_audio_extension/cli.py`
+  - evidence: CLI player group in cli.py: play, play --now, pause, resume, stop, clear, status against the authenticated player route; the 28-line skill rewritten to it; docs/audio-player-design.md section 2.3 states the CLI client contract; make test exit 0 (Jest 8/8 suites, 87/87, pytest 145 passed), Galata 29 passed, 2 skipped
+  - root-cause: 2026-11-24T18:51:39Z @kj The player was specified as an audio:player command for the commands relay, so the CLI never gained a playback path
+  - repro: read the skill, then `jupyterlab_audio --help`: it names paplay and audio:player for playback and the CLI lists no play command
+  - test-tags: UNIT, MANUAL
+  - log: 2026-11-24T18:12:56Z @kj added
+  - log: 2026-11-24T18:51:39Z @kj root-cause recorded; reason: tmp/workflows/cli-scan/report.json records the route shipped while the CLI kept only install, validate, start and stop
+  - log: 2026-11-24T18:51:43Z @kj overrides ACC-AGENT-45-SKILL removed - ACC-AGENT-45-SKILL was amended to the CLI-first skill, so the override recorded against the paplay-era skill is stale
+  - log: 2026-11-24T19:20:41Z @kj closed: fixed

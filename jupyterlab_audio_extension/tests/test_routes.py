@@ -395,9 +395,10 @@ async def _player(jp_fetch, body, headers=None):
 
 
 def _player_state(response):
-    """The response state without the sink report, which the sink tests cover."""
+    """The response state without the sink report and the capture path, which have their own tests."""
     state = json.loads(response.body)
     state.pop("sink")
+    state.pop("capture")
     return state
 
 
@@ -431,6 +432,14 @@ async def test_player_route_returns_the_empty_state(jp_fetch):
     response = await _player(jp_fetch, {"action": "status"})
     assert response.code == 200
     assert _player_state(response) == EMPTY_PLAYER
+
+
+async def test_player_status_reports_where_captured_audio_is_delivered(
+    jp_fetch, voice_sink_path
+):
+    # ACC-CTRL-100: the settings panel reads the capture FIFO path from the player state.
+    response = await _player(jp_fetch, {"action": "status"})
+    assert json.loads(response.body)["capture"] == voice_sink_path
 
 
 async def test_player_status_reports_a_missing_speaker_fifo(jp_fetch, speaker_path):

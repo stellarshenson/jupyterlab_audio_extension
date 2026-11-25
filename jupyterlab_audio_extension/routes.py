@@ -151,9 +151,10 @@ class PlayerHandler(APIHandler):
     refused request answers 400 with a message naming the problem.
     """
 
-    def initialize(self, player=None, speaker=None):
+    def initialize(self, player=None, speaker=None, capture=None):
         self._player = player
         self._speaker = speaker
+        self._capture = capture
 
     @tornado.web.authenticated
     async def post(self, *args, **kwargs):
@@ -174,6 +175,8 @@ class PlayerHandler(APIHandler):
         except ValueError as exc:
             raise tornado.web.HTTPError(400, str(exc)) from exc
         state["sink"] = _sink_state(self._speaker.path)
+        # Where captured audio is delivered, for the settings panel (ACC-CTRL-100).
+        state["capture"] = self._capture.path
         self.write(state)
 
 
@@ -234,6 +237,10 @@ def setup_route_handlers(web_app, sink, reader, player):
     handlers = [
         (stream_route, AudioCaptureWebSocketHandler, {"sink": sink}),
         (speaker_route, SpeakerWebSocketHandler, {"reader": reader}),
-        (player_route, PlayerHandler, {"player": player, "speaker": reader}),
+        (
+            player_route,
+            PlayerHandler,
+            {"player": player, "speaker": reader, "capture": sink},
+        ),
     ]
     web_app.add_handlers(host_pattern, handlers)

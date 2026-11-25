@@ -859,7 +859,7 @@ test.describe('player', () => {
     await expect(mic).toBeVisible();
     await expect(play).toBeVisible();
     await expect(pause).toBeVisible();
-    await expect(pill.locator('.jp-Audio-divider')).toHaveCount(3);
+    await expect(pill.locator('.jp-Audio-divider')).toHaveCount(4);
 
     // The smaller squircle: 4 px corners, 22 px controls and 15 px icons.
     expect(
@@ -917,7 +917,7 @@ test.describe('player', () => {
         node => getComputedStyle(node).backgroundColor
       )
     );
-    expect(dividers).toHaveLength(3);
+    expect(dividers).toHaveLength(4);
     for (const colour of dividers) {
       expect(colour).toBe(resolved.divider);
     }

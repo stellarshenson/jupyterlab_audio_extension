@@ -146,7 +146,9 @@ describe('VoiceStatus pill', () => {
       'divider',
       'play',
       'divider',
-      'pause'
+      'pause',
+      'divider',
+      'gear'
     ]);
     const lampElement = widget.node.querySelector('.jp-Audio-lamp');
     expect(lampElement).not.toBeNull();

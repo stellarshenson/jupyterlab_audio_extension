@@ -25,6 +25,8 @@ import shutil
 import stat
 import subprocess
 import sys
+import urllib.error
+import urllib.request
 
 from .speaker import SPEAKER_FIFO_NAME, STOP_MARKER_NAME
 
@@ -40,6 +42,9 @@ RATE = 16000
 CHANNELS = 1
 SAMPLE_FORMAT = "s16le"
 APT_PACKAGES = ["pulseaudio", "pulseaudio-utils", "sox", "libsox-fmt-pulse"]
+
+PLAYER_ROUTE = "/jupyterlab-audio-extension/player"
+TOKEN_ENV = ("JUPYTERHUB_API_TOKEN", "JPY_API_TOKEN", "JUPYTER_TOKEN")
 
 # ------------------------------------------------------------------------------ colour
 
@@ -542,6 +547,192 @@ def _write_sink_config(cfg: str, sink: str, dry: bool) -> None:
     print("  restart the Jupyter server for it to take effect")
 
 
+# --------------------------------------------------------------------- player (client)
+
+
+class _PlayerRefused(Exception):
+    """A player request the CLI refuses before sending it."""
+
+
+def _env_token() -> str:
+    for name in TOKEN_ENV:
+        value = os.environ.get(name, "")
+        if value:
+            return value
+    return ""
+
+
+def _running_servers(records) -> str:
+    listed = ", ".join(
+        f"{record.get('port')}{record.get('base_url') or '/'}"
+        + ("" if record.get("token") else " (no token)")
+        for record in records
+    )
+    return listed or "none"
+
+
+def _server_records() -> list:
+    """One bounded `jupyter server list --json`; lines that are not JSON objects are skipped."""
+    try:
+        result = subprocess.run(
+            ["jupyter", "server", "list", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise _PlayerRefused(f"cannot run `jupyter server list --json`: {exc}") from exc
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout).strip() or "exit " + str(result.returncode)
+        raise _PlayerRefused(f"`jupyter server list --json` failed: {detail}")
+    records = []
+    for line in result.stdout.splitlines():
+        try:
+            record = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(record, dict):
+            records.append(record)
+    return records
+
+
+def _matching_records(records) -> list:
+    root = os.environ.get("JUPYTER_SERVER_ROOT", "")
+    if not root:
+        return list(records)
+    wanted = os.path.abspath(root)
+    return [
+        record
+        for record in records
+        if os.path.abspath(str(record.get("root_dir", ""))) == wanted
+    ]
+
+
+def _record_base(record) -> str:
+    scheme = "https" if record.get("secure") else "http"
+    return f"{scheme}://127.0.0.1:{record.get('port')}{record.get('base_url') or '/'}"
+
+
+def _record_token(record) -> str:
+    token = record.get("token") if isinstance(record, dict) else None
+    return token if isinstance(token, str) else ""
+
+
+def _player_server() -> tuple:
+    """The (base URL, token) of the player route; an ambiguous lab is refused."""
+    base = os.environ.get("JUPYTER_SERVER_URL", "").strip()
+    token = _env_token()
+    if base and token:
+        return base, token
+    records = _server_records()
+    matched = _matching_records(records)
+    if base:
+        # The record is needed only for its token; zero matches send no token and let the
+        # route answer 403, several are refused rather than guessed.
+        if len(matched) > 1:
+            raise _PlayerRefused(
+                "several running Jupyter servers match; cannot tell which is the lab. "
+                f"Running: {_running_servers(records)}"
+            )
+        return base, token or _record_token(matched[0] if matched else None)
+    if len(matched) != 1:
+        reason = (
+            "no running Jupyter server matched"
+            if not matched
+            else "several running Jupyter servers matched"
+        )
+        raise _PlayerRefused(
+            f"{reason}; cannot tell which is the lab. Running: {_running_servers(records)}"
+        )
+    record = matched[0]
+    return _record_base(record), token or _record_token(record)
+
+
+def _player_request(base: str, token: str, body: dict) -> urllib.request.Request:
+    """The POST that carries one action; the token appears only in its Authorization header."""
+    request = urllib.request.Request(
+        base.rstrip("/") + PLAYER_ROUTE,
+        data=json.dumps(body).encode("utf-8"),
+        method="POST",
+    )
+    request.add_header("Content-Type", "application/json")
+    if token:
+        request.add_header("Authorization", f"token {token}")
+    return request
+
+
+def _open(request) -> str:
+    """Send the request with proxies bypassed, so a loopback token never reaches a proxy."""
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    with opener.open(request, timeout=10) as response:
+        return response.read().decode("utf-8")
+
+
+def _http_error_message(exc) -> str:
+    try:
+        payload = json.loads(exc.read().decode("utf-8", "replace"))
+    except (OSError, ValueError):
+        payload = None
+    if isinstance(payload, dict):
+        for key in ("message", "reason"):
+            value = payload.get(key)
+            if isinstance(value, str) and value:
+                return value
+    return f"HTTP {exc.code} {exc.reason}"
+
+
+def _summary(state: dict) -> str:
+    return (
+        f"playing {len(state.get('playing') or [])} "
+        f"queue {len(state.get('queue') or [])} "
+        f"paused {'yes' if state.get('paused') else 'no'} "
+        f"stopped {'yes' if state.get('stopped') else 'no'} "
+        f"sink {(state.get('sink') or {}).get('state', 'missing')}"
+    )
+
+
+def _player_action(body: dict, json_output: bool) -> int:
+    try:
+        base, token = _player_server()
+    except _PlayerRefused as refusal:
+        print(str(refusal), file=sys.stderr)
+        return 1
+    try:
+        raw = _open(_player_request(base, token, body))
+    except urllib.error.HTTPError as exc:
+        print(_http_error_message(exc), file=sys.stderr)
+        return 1
+    except OSError as exc:
+        print(
+            f"cannot reach the Jupyter server at {base}: {getattr(exc, 'reason', exc)}",
+            file=sys.stderr,
+        )
+        return 1
+    try:
+        state = json.loads(raw)
+    except ValueError:
+        state = None
+    if not isinstance(state, dict):
+        print("the player route returned no JSON object", file=sys.stderr)
+        return 1
+    if json_output:
+        sys.stdout.write(raw if raw.endswith("\n") else raw + "\n")
+    else:
+        print(_summary(state))
+    return 0
+
+
+def cmd_player_play(args) -> int:
+    return _player_action(
+        {"action": "play", "path": args.path, "mode": "now" if args.now else "queue"},
+        args.json,
+    )
+
+
+def cmd_player_action(args) -> int:
+    return _player_action({"action": args.player_action}, args.json)
+
+
 # ------------------------------------------------------------------------------ main
 
 
@@ -555,8 +746,11 @@ def main(argv=None) -> int:
         "  0  success\n"
         "  1  validate found a missing component, start did not load voicein or voiceout,\n"
         "     stop failed, or a command that install runs failed, or install found a\n"
-        "     required package missing and no apt-get on PATH\n"
-        "  2  unknown command or flag\n"
+        "     required package missing and no apt-get on PATH, or a player request was\n"
+        "     refused or the server was unreachable\n"
+        "  2  unknown command or flag (usage)\n"
+        "\n"
+        "stop kills the PulseAudio daemon; player stop ends playback and leaves the daemon.\n"
         "\n"
         "environment:\n"
         "  NO_COLOR, TERM  no status colour when NO_COLOR is set, TERM is dumb or the output\n"
@@ -648,6 +842,98 @@ def main(argv=None) -> int:
         "--sink-path", default=DEFAULT_SINK_PATH, help="FIFO path (default: %(default)s)"
     )
     p_stop.set_defaults(func=cmd_stop)
+
+    p_player = sub.add_parser(
+        "player",
+        help="control the virtual player: play, pause, resume, stop, clear and status",
+        description="Control the virtual player through the running Jupyter server, which owns\n"
+        "the files and the playback processes. Actions: play, pause, resume, stop, clear\n"
+        "and status. Each action prints one line by default:\n"
+        "  playing N queue M paused yes|no stopped yes|no sink ready|off|missing\n"
+        "--json prints the server's state object verbatim. The command finds the server\n"
+        "from JUPYTER_SERVER_URL, else from the one running server whose root_dir is\n"
+        "JUPYTER_SERVER_ROOT, and authenticates with JUPYTERHUB_API_TOKEN, JPY_API_TOKEN,\n"
+        "JUPYTER_TOKEN or that server's record. Audibility needs a connected JupyterLab\n"
+        "tab. player stop ends playback and leaves the PulseAudio daemon; the top-level\n"
+        "stop kills the daemon.",
+        epilog="examples:\n"
+        "  jupyterlab_audio player status\n"
+        "  jupyterlab_audio player play a.wav\n"
+        "  jupyterlab_audio player play a.wav --now\n"
+        "  jupyterlab_audio player pause\n"
+        "  jupyterlab_audio player resume\n"
+        "  jupyterlab_audio player stop\n"
+        "  jupyterlab_audio player clear\n"
+        "  jupyterlab_audio player status --json",
+        formatter_class=raw,
+    )
+    player_sub = p_player.add_subparsers(dest="player_action", required=True)
+
+    p_play = player_sub.add_parser(
+        "play",
+        help="play a file, by default behind the current file",
+        description="Queue PATH on the player. A queue play starts the earliest queued file\n"
+        "when nothing plays; after a player stop the earliest queued file starts and PATH\n"
+        "joins behind it, so PATH need not be the file that plays. The 0.2 s start grace\n"
+        "delays the answer only when a file actually starts; a play that only joins the\n"
+        "queue returns at once. PATH is sent as typed and resolved by the server against\n"
+        "the Jupyter contents root; a missing file, a non-file or a path outside the root\n"
+        "is refused with the server's message. Audibility needs a connected JupyterLab\n"
+        "tab.",
+        epilog="examples:\n"
+        "  jupyterlab_audio player play a.wav\n"
+        "  jupyterlab_audio player play a.wav --now\n"
+        "  jupyterlab_audio player play a.wav --json",
+        formatter_class=raw,
+    )
+    p_play.add_argument("path", help="audio file to play, sent as typed")
+    p_play.add_argument(
+        "--now", action="store_true", help="start PATH at once beside every playing file"
+    )
+    p_play.add_argument(
+        "--json", action="store_true", help="print the server's state object verbatim"
+    )
+    p_play.set_defaults(func=cmd_player_play)
+
+    action_help = {
+        "pause": (
+            "pause every playing file",
+            "Send SIGSTOP to every playing file and freeze its reported position; queued\n"
+            "files stay queued.",
+        ),
+        "resume": (
+            "resume every paused file and start the queue head when idle",
+            "Send SIGCONT to every paused file, clear the stop gate and start the queue head\n"
+            "when nothing is active.",
+        ),
+        "stop": (
+            "end every playing or paused file and keep the queue",
+            "End every playing or paused file and set the stop gate, keeping the queue. This\n"
+            "leaves the PulseAudio daemon alone; the top-level stop kills the daemon.",
+        ),
+        "clear": (
+            "remove the queued files",
+            "Remove the queued files only; playing and paused files keep playing.",
+        ),
+        "status": (
+            "print the player and speaker sink state",
+            "Print the player state as one line by default: playing and queue counts,\n"
+            "paused and stopped flags and the speaker sink state. --json prints the\n"
+            "server's state object verbatim.",
+        ),
+    }
+    for name, (help_line, description) in action_help.items():
+        action_parser = player_sub.add_parser(
+            name,
+            help=help_line,
+            description=description,
+            epilog=f"examples:\n  jupyterlab_audio player {name}",
+            formatter_class=raw,
+        )
+        action_parser.add_argument(
+            "--json", action="store_true", help="print the server's state object verbatim"
+        )
+        action_parser.set_defaults(func=cmd_player_action, player_action=name)
 
     args = parser.parse_args(argv)
     return args.func(args)

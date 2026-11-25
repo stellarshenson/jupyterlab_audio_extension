@@ -17,7 +17,7 @@ Status: built, 2026-11-09.
 
 ## 1. Overview
 
-The server holds one player in memory, and one JupyterLab command drives it. The command `audio:player` takes an `action` argument and covers every operation: play, play now, pause, resume, stop, clear and status. The player replaces the two earlier commands `play-file` and `stop-playback`.
+The server holds one player in memory, and three clients drive it through one authenticated route: the palette, the `audio:player` relay command and the `jupyterlab_audio player` CLI. The command `audio:player` takes an `action` argument and covers every operation: play, play now, pause, resume, stop, clear and status. The CLI `player` subcommand group posts the same `{action, mode?, path?}` object to the same route. The player replaces the two earlier commands `play-file` and `stop-playback`.
 
 Playback keeps its current path to the browser. Each playing file is one `paplay` process on the container audio; PulseAudio mixes concurrent processes; the speaker chain carries that audio to every open JupyterLab tab. The player adds ordering, mixing and control on top of a path the lab already proves.
 
@@ -25,7 +25,7 @@ The player is a build of these registered criteria: `ACC-PLAYER-50` to `ACC-PLAY
 
 ## 2. Command contract
 
-The command has one id and one object argument. The agent path is `jupyterlab-commands execute audio:player --args '<json>'`; the palette runs the same command.
+The route has one contract and one object argument. Three clients use it: the palette, the `audio:player` relay command with `jupyterlab-commands execute audio:player --args '<json>'`, and the CLI with `jupyterlab_audio player <action>`. The agent path is the CLI player subcommand, which needs no registered browser tab and no allowlist entry; the palette and the relay run the same command.
 
 ### 2.1 Arguments
 
@@ -39,7 +39,7 @@ The command has one id and one object argument. The agent path is `jupyterlab-co
 | `clear`  | none              | none     | Removes every queued file that has not started. Playing files continue                                    |
 | `status` | none              | none     | Returns the state and changes nothing                                                                     |
 
-`path` is resolved against the Jupyter root, and a path outside it is refused. These calls are valid:
+`path` is sent as typed and resolved by the server against the Jupyter contents root, not the shell working directory: a root-relative path such as `media/a.mp3` and an absolute path inside the root are accepted, and a path outside the root, a missing file or a non-file is refused. These calls are valid:
 
 ```json
 {"action": "play", "mode": "now", "path": "media/announcement.mp3"}
@@ -69,6 +69,8 @@ An unknown action, a missing `path` on `play`, a path outside the Jupyter root, 
 ### 2.3 Route and palette entry
 
 The command posts `{action, mode?, path?}` to `…/jupyterlab-audio-extension/player` with `ServerConnection.makeRequest`, and returns the JSON state. The handler is authenticated with the Jupyter token and answers 400 with `{"message": …}` that names the problem for a refused request. It is registered beside the two websocket routes.
+
+The CLI client `jupyterlab_audio player` posts `{action, mode?, path?}` to the authenticated player route and prints the returned state.
 
 One palette entry, **Stop All Audio** in category **Audio**, adds the command with `{action: "stop"}`. The command's `label` function returns `Stop All Audio` for that action and `Audio Player` otherwise. The palette resolves a label function with the item's args (`@lumino/widgets` `CommandPalette` calls `commands.label(command, args)`), so no alias command is registered; the relay reads the label with no args and gets `Audio Player`.
 

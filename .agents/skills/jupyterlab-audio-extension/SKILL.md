@@ -1,30 +1,28 @@
 ---
 name: jupyterlab-audio-extension
-description: Play a sound in the user's JupyterLab browser tab and operate the jupyterlab_audio CLI. Use when an agent must speak to the user, play an audio file or a cue, check why the lab is silent, or start or stop the microphone bridge.
+description: Play audio in the user's JupyterLab browser tab with CLI playback - jupyterlab_audio player play (queue or --now mixed), status, pause, resume, stop and clear. Use when an agent must speak to the user, play a sound or a cue, check why the lab is silent, or start or stop the microphone bridge.
 ---
 
 # Sound in the browser
 
-Container has no sound device. Default PulseAudio sink voiceout plays in every open JupyterLab tab.
+Container has no sound device. The server player plays to the default sink voiceout. Sound is heard only while a JupyterLab tab holds the speaker stream; every player command works without one.
 
-- Any file or program: `paplay <file>` (wav, mp3), or anything that plays to the default sink
-- Player, one command with an action: `jupyterlab-commands execute audio:player --args '{"action": "play", "path": "<file>"}' --purpose "play a sound" --owner "<agent>"`; the path is relative to the Jupyter root, not the shell directory
-  - `play` queues the file and starts it when nothing plays; `"mode": "now"` mixes it with what plays
-  - actions: `play`, `pause`, `resume`, `stop`, `clear`, `status`; every call returns the player state
-  - palette entry Stop All Audio runs `{"action": "stop"}`
-  - a direct `paplay` ends only when its process ends
-- Microphone, for programs such as Claude Code /voice: `audio:enable` starts capture and returns once it streams, `audio:disable` stops it; enable names the reason when the browser has no microphone permission or the prompt stays unanswered for 10 s
+- `jupyterlab_audio player play <file>` queues the file; when nothing is playing or paused, the earliest queued file starts, then the queue advances as each file ends
+  - Example: A plays; `player play B` queues B, which starts when A ends; `player play C --now` mixes C with A
+- `jupyterlab_audio player play <file> --now` starts the file at once beside every playing file, and PulseAudio mixes them
+- `jupyterlab_audio player status` prints the playing and queue counts, the paused and stopped flags and the sink state; `--json` prints the state verbatim
+- `jupyterlab_audio player pause` freezes every playing file; `resume` continues them and starts the queue when idle; `stop` ends playing and paused files and keeps the queue for the next play or resume; `clear` drops only the queue
+- Path: relative to the Jupyter root, or absolute inside it; the server refuses a path outside the root, a missing file and a non-file with its message
+- `paplay <file>` or any program playing to the sink sits outside the player: it is not queued, absent from status, cannot be paused or resumed, and `player stop` and `clear` do not end it
+- `jupyterlab_audio stop` kills the PulseAudio daemon, so the microphone and speaker go silent; `jupyterlab_audio player stop` ends playback only and leaves the daemon
+- Help: `jupyterlab_audio player --help` and `jupyterlab_audio --help`
 
 ## Commands CLI
 
-- `jupyterlab-commands list` prints each allowed id with its description; `--json` adds each command's argument schema
-- Run it before the first call. An id outside the allowlist exits 4: the saved allowlist of `@stellarshenson/jupyterlab-commands-extension:plugin` may predate the id, and the user adds it in Settings > Commands Executor or with the Add to command executor button. The Commands Executor's shipped default still lists the retired `voice-capture:*` ids; add `audio:player`, `audio:enable` and `audio:disable` in Settings > Commands Executor when a call exits 4.
-- Every `execute` carries `--purpose` (at most 25 words) and `--owner` (agent or project); `--json` for machine-readable output; `--args-file <file>` instead of `--args` for long JSON
-- Token comes from `JUPYTERLAB_COMMANDS_TOKEN` or the server record; never print it, never pass `--token`
+- The commands relay is only for the microphone: `jupyterlab-commands execute audio:enable` starts capture for a program such as Claude Code /voice and `audio:disable` stops it; both need a registered browser tab and an allowlist entry
+- `jupyterlab-commands list --json` prints each allowed id and its argument schema; an id outside the saved allowlist exits 4, and the user adds it in Settings > Commands Executor
+- Every `execute` carries `--purpose` (at most 25 words) and `--owner`; the token comes from `JUPYTERLAB_COMMANDS_TOKEN` or the server record; never print it
 
 ## Rules
 
-- Sound plays as soon as it arrives; only a tab with no click or key press since load stays silent until the first one
-- No sound: `jupyterlab_audio validate`; flags: `jupyterlab_audio --help`, `jupyterlab_audio <command> --help`
-- Ask the user before `jupyterlab_audio stop`: it kills the PulseAudio daemon and the microphone and speaker go silent
-<!-- improved 2026-11-09 | body 371W -> 314W / 21L -> 25L | benchmark n/a (not-requested) | via improve-skill -->
+- No sound: `jupyterlab_audio player status` shows the sink state, and `jupyterlab_audio validate` checks the audio chain; ask the user before `jupyterlab_audio stop`

@@ -2,6 +2,20 @@
 
 <!-- <START NEW CHANGELOG ENTRY> -->
 
+## [1.0.42] - 2026-11-25
+
+### Added
+
+- `jupyterlab_audio player` commands - play (queue) and `--now` (mixed), pause, resume, stop, clear and status `--json` - post to the authenticated player route with server URL and token discovery, so an agent plays, queues and mixes sounds from a shell without the commands relay
+- The status pill's gear opens a settings panel with a read-only Audio card; another extension adds its own card through the `AudioSettings` toolbar factory and a `jupyter.lab.toolbars` schema entry
+
+### Changed
+
+- The shipped agent skill teaches the `jupyterlab_audio player` path first, with a two-file queue-and-mix example, the root-relative path rule and the open-tab audibility condition; the commands relay is narrowed to `audio:enable` and `audio:disable`, and `paplay` is a fallback outside the queue and controls
+- README, the enable guide and the player design doc name the CLI player as the terminal path and keep the relay for the microphone
+- The status pill's slot items render flat, the pill margin gives 8 px each side, and the live microphone and lamp green is one CSS custom property, `--jp-Audio-live-color`, in both themes
+- The player's queue and mixing gain a real-engine two-file test, and the Galata test server writes its FIFOs under the sandbox `/tmp` and disables the dictation frontend so the suite runs against an audio-only lab
+
 ## [1.0.5] - 2026-11-15
 
 ### Changed

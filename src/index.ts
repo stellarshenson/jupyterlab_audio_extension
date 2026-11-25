@@ -3,7 +3,12 @@ import {
   JupyterFrontEndPlugin
 } from '@jupyterlab/application';
 
-import { ICommandPalette } from '@jupyterlab/apputils';
+import {
+  ICommandPalette,
+  IToolbarWidgetRegistry,
+  createToolbarFactory,
+  setToolbar
+} from '@jupyterlab/apputils';
 
 import { URLExt } from '@jupyterlab/coreutils';
 
@@ -13,8 +18,14 @@ import { ISettingRegistry } from '@jupyterlab/settingregistry';
 
 import { IStatusBar } from '@jupyterlab/statusbar';
 
+import { nullTranslator } from '@jupyterlab/translation';
+
+import { Toolbar } from '@jupyterlab/ui-components';
+
 // eslint-disable-next-line jupyter/prefer-lazy-imports -- activate() creates the model at once; AudioCapture is needed for the status item
 import { CONNECT_TIMEOUT_MS, AudioCapture } from './audio-capture';
+
+import { createCards } from './cards';
 
 // eslint-disable-next-line jupyter/prefer-lazy-imports -- activate() registers the status item at once
 import { VoiceStatus } from './status';
@@ -34,12 +45,18 @@ const plugin: JupyterFrontEndPlugin<void> = {
   description:
     "JupyterLab extension that captures microphone audio in the browser and streams it to a server-side bridge, exposing it as a virtual audio source so terminal applications running in the container (such as Claude Code voice mode) can record from the user's microphone",
   autoStart: true,
-  optional: [ICommandPalette, IStatusBar, ISettingRegistry],
+  optional: [
+    ICommandPalette,
+    IStatusBar,
+    ISettingRegistry,
+    IToolbarWidgetRegistry
+  ],
   activate: (
     app: JupyterFrontEnd,
     palette: ICommandPalette | null,
     statusBar: IStatusBar | null,
-    settingRegistry: ISettingRegistry | null
+    settingRegistry: ISettingRegistry | null,
+    toolbarRegistry: IToolbarWidgetRegistry | null
   ) => {
     console.log(
       'JupyterLab extension @stellarshenson/jupyterlab-audio-extension is activated!'
@@ -183,9 +200,35 @@ const plugin: JupyterFrontEndPlugin<void> = {
       });
     }
 
+    // Other extensions fill the pill's slot through "jupyter.lab.toolbars" -> "AudioStatus".
+    // The factory registers the settings transform without which the load below fails.
+    const slotFactory =
+      toolbarRegistry && settingRegistry
+        ? createToolbarFactory(
+            toolbarRegistry,
+            settingRegistry,
+            'AudioStatus',
+            PLUGIN_ID,
+            nullTranslator
+          )
+        : null;
+
     if (statusBar) {
+      const slot = slotFactory ? new Toolbar() : undefined;
+      const status = new VoiceStatus(
+        model,
+        app.serviceManager.serverSettings,
+        slot,
+        // Other extensions add cards to the gear's panel through "AudioSettings".
+        toolbarRegistry && settingRegistry
+          ? createCards(toolbarRegistry, settingRegistry)
+          : undefined
+      );
+      if (slotFactory) {
+        setToolbar(status, slotFactory, slot);
+      }
       statusBar.registerStatusItem('jupyterlab_audio_extension:status', {
-        item: new VoiceStatus(model, app.serviceManager.serverSettings),
+        item: status,
         align: 'left',
         rank: 100
       });

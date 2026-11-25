@@ -17,6 +17,9 @@
   gap: 1px;
   box-sizing: border-box;
   height: 20px;
+
+  /* With a status bar item's own 2 px margin: 8 px of space either side (ACC-CTRL-98). */
+  margin: 0 6px;
   padding: 0;
   border: 1px solid var(--vc-pill-fill);
   border-radius: 4px;
@@ -54,6 +57,38 @@
   background: none;
   color: var(--jp-ui-font-color1);
   cursor: pointer;
+}
+
+/* The AudioStatus toolbar slot (ACC-CTRL-96): no toolbar chrome, each item a control's size. */
+.jp-Audio-status .jp-Audio-slot {
+  height: 100%;
+
+  /* The core ToolbarLayout writes an inline 32px min-height once an item shows. */
+  min-height: 0 !important;
+  padding: 0;
+  border: none;
+  box-shadow: none;
+  background: none;
+}
+
+.jp-Audio-slot > .jp-Toolbar-item {
+  width: 22px;
+}
+
+/* Flat like the pill's own controls: no tint for hover, active or pressed (ACC-CTRL-97); a rule
+   here outranks the button's own shadow-root :host states. */
+.jp-Audio-slot .jp-ToolbarButtonComponent {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  margin: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.jp-Audio-slot .jp-ToolbarButtonComponent::part(control) {
+  padding: 0;
 }
 
 /* The idle microphone uses the disabled control grey (ACC-CTRL-75). */
@@ -101,6 +136,81 @@
   pointer-events: none;
 }
 
+/* The gear is no audio control: a shut-down audio system leaves it unmarked. Its open panel
+   marks it clicked, which the status bar paints in the brand colour; the pill stays flat. */
+.jp-Audio-status[data-vc-lamp='off'] .jp-Audio-gear::before,
+.jp-Audio-status[data-vc-lamp='off'] .jp-Audio-gear::after {
+  content: none;
+}
+
+.jp-Audio-status .jp-Audio-gear.jp-mod-clicked {
+  background: none;
+}
+
+/* The panel the gear opens (ACC-CTRL-99): a popup on the page body, above the status bar. */
+.jp-AudioSettings.jp-StatusBar-HoverItem {
+  min-width: 280px;
+  max-width: 360px;
+  overflow-y: auto;
+  border: 1px solid var(--jp-border-color2);
+  border-radius: 2px;
+  outline: none;
+  background: var(--jp-layout-color1);
+  box-shadow: var(--jp-elevation-z6);
+  color: var(--jp-ui-font-color1);
+  font-family: var(--jp-ui-font-family);
+  font-size: var(--jp-ui-font-size1);
+
+  /* The gear's top edge is inside the status bar: the lift puts the panel above the bar. */
+  transform: translateY(-4px);
+}
+
+/* A card: a header one step up from the panel, then rows. Other extensions' cards use these
+   classes too (ACC-CTRL-101). */
+.jp-AudioSettings-cardHeader {
+  padding: 4px 8px;
+  background: var(--jp-layout-color2);
+  font-size: var(--jp-ui-font-size0);
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.jp-AudioSettings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 24px;
+  padding: 0 8px;
+}
+
+.jp-AudioSettings-label {
+  color: var(--jp-ui-font-color2);
+}
+
+.jp-AudioSettings-value {
+  color: var(--jp-ui-font-color0);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.jp-AudioSettings-value[data-vc-summary='delivery'] {
+  font-family: var(--jp-code-font-family);
+}
+
+/*
+  The live microphone green of the active lamp and the streaming microphone, one per theme
+  (ACC-CTRL-102-LIVECOLOR); another extension reads it without importing this package.
+*/
+:root {
+  --jp-Audio-live-color: #6dbd81;
+}
+
+:root:has(> body[data-jp-theme-light='true']) {
+  --jp-Audio-live-color: #347443;
+}
+
 /* The audio-system lamp leads the pill: a 6 px disc, filled passive grey when ready. */
 .jp-Audio-lamp {
   flex: none;
@@ -117,7 +227,7 @@
 }
 
 .jp-Audio-lamp[data-vc-lamp='active'] {
-  background: #6dbd81;
+  background: var(--jp-Audio-live-color);
 }
 
 [data-jp-theme-light='true'] .jp-Audio-lamp {
@@ -130,7 +240,7 @@
 }
 
 [data-jp-theme-light='true'] .jp-Audio-lamp[data-vc-lamp='active'] {
-  background: #347443;
+  background: var(--jp-Audio-live-color);
 }
 
 /* The fault rule comes last so the amber wins over the theme overrides (ACC-CTRL-72). */
@@ -149,15 +259,11 @@
 }
 
 .jp-Audio-status.jp-mod-streaming .jp-Audio-mic {
-  color: #6dbd81;
+  color: var(--jp-Audio-live-color);
 }
 
 .jp-Audio-status.jp-mod-error .jp-Audio-mic {
   color: var(--jp-warn-color1);
-}
-
-[data-jp-theme-light='true'] .jp-Audio-status.jp-mod-streaming .jp-Audio-mic {
-  color: #347443;
 }
 
 .jp-Audio-status.jp-mod-connecting .jp-Audio-mic .jp-Audio-icon {
