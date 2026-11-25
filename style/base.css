@@ -136,39 +136,68 @@
   pointer-events: none;
 }
 
-/* The gear is no audio control: a shut-down audio system leaves it unmarked. Its open panel
-   marks it clicked, which the status bar paints in the brand colour; the pill stays flat. */
+/* The gear is no audio control: a shut-down audio system leaves it unmarked. */
 .jp-Audio-status[data-vc-lamp='off'] .jp-Audio-gear::before,
 .jp-Audio-status[data-vc-lamp='off'] .jp-Audio-gear::after {
   content: none;
 }
 
-.jp-Audio-status .jp-Audio-gear.jp-mod-clicked {
-  background: none;
-}
-
-/* The panel the gear opens (ACC-CTRL-99): a popup on the page body, above the status bar. */
-.jp-AudioSettings.jp-StatusBar-HoverItem {
-  min-width: 280px;
-  max-width: 360px;
-  overflow-y: auto;
-  border: 1px solid var(--jp-border-color2);
-  border-radius: 2px;
-  outline: none;
-  background: var(--jp-layout-color1);
-  box-shadow: var(--jp-elevation-z6);
+/* The Audio Settings tab the gear opens (ACC-CTRL-99): a page on the main-area background. */
+.jp-AudioSettings {
+  box-sizing: border-box;
+  height: 100%;
+  padding: 20px 28px;
+  overflow: auto;
+  background: var(--jp-layout-color0);
   color: var(--jp-ui-font-color1);
   font-family: var(--jp-ui-font-family);
   font-size: var(--jp-ui-font-size1);
-
-  /* The gear's top edge is inside the status bar: the lift puts the panel above the bar. */
-  transform: translateY(-4px);
 }
 
-/* A card: a header one step up from the panel, then rows. Other extensions' cards use these
-   classes too (ACC-CTRL-101). */
+.jp-AudioSettings-pageHead,
+.jp-AudioSettings-footer {
+  max-width: 900px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.jp-AudioSettings-title {
+  margin: 0 0 2px;
+  color: var(--jp-ui-font-color0);
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.jp-AudioSettings-subtitle {
+  margin: 0 0 14px;
+  color: var(--jp-ui-font-color2);
+}
+
+/* The board: two columns on a wide tab, one on a narrow one (ACC-CTRL-106-BOARD). */
+.jp-AudioSettings .jp-AudioSettings-board {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
+  gap: 12px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+/* Another extension's cards are tiles of the board, not one tile of their own. */
+.jp-AudioSettings .jp-AudioSettings-cards {
+  display: contents;
+}
+
+/* A card: one tile of the board. Other extensions' cards use these classes too
+   (ACC-CTRL-101). */
+.jp-AudioSettings-card {
+  overflow: hidden;
+  border: 1px solid var(--jp-border-color2);
+  border-radius: 2px;
+  background: var(--jp-layout-color1);
+}
+
 .jp-AudioSettings-cardHeader {
-  padding: 4px 8px;
+  padding: 4px 10px;
   background: var(--jp-layout-color2);
   font-size: var(--jp-ui-font-size0);
   font-weight: 600;
@@ -181,8 +210,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: 24px;
-  padding: 0 8px;
+  min-height: 26px;
+  padding: 0 10px;
 }
 
 .jp-AudioSettings-label {
@@ -197,6 +226,126 @@
 
 .jp-AudioSettings-value[data-vc-summary='delivery'] {
   font-family: var(--jp-code-font-family);
+}
+
+.jp-AudioSettings-cardBody {
+  padding: 10px;
+}
+
+.jp-AudioSettings-note,
+.jp-AudioSettings-hint,
+.jp-AudioSettings-settingDescription,
+.jp-AudioSettings-footer {
+  color: var(--jp-ui-font-color2);
+  font-size: var(--jp-ui-font-size0);
+}
+
+.jp-AudioSettings-note {
+  margin: 0 0 8px;
+}
+
+.jp-AudioSettings-hint {
+  margin: 8px 0 0;
+}
+
+.jp-AudioSettings-footer {
+  margin: 16px auto 0;
+}
+
+.jp-AudioSettings-empty {
+  padding: 8px 10px;
+  border: 1px dashed var(--jp-border-color1);
+  border-radius: 2px;
+  color: var(--jp-ui-font-color2);
+  font-size: var(--jp-ui-font-size0);
+}
+
+.jp-AudioSettings-setting {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.jp-AudioSettings-settingTitle {
+  margin-bottom: 2px;
+  color: var(--jp-ui-font-color0);
+  font-weight: 600;
+}
+
+.jp-AudioSettings-settingDescription {
+  margin: 0;
+  max-width: 62ch;
+}
+
+/* The auto-connect switch: a real checkbox, visually hidden, with a track and a thumb. */
+.jp-AudioSettings-switch {
+  position: relative;
+  flex: none;
+  display: block;
+  width: 34px;
+  height: 18px;
+  margin-top: 2px;
+  cursor: pointer;
+}
+
+.jp-AudioSettings-switchInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.jp-AudioSettings-switchTrack {
+  display: block;
+  box-sizing: border-box;
+  width: 34px;
+  height: 18px;
+  border-radius: 2px;
+  background: var(--jp-border-color1);
+}
+
+.jp-AudioSettings-switchThumb {
+  display: block;
+  width: 14px;
+  height: 14px;
+  margin: 2px;
+  border-radius: 2px;
+  background: var(--jp-ui-font-color0);
+}
+
+.jp-AudioSettings-switchInput:checked + .jp-AudioSettings-switchTrack {
+  background: var(--jp-brand-color1);
+}
+
+.jp-AudioSettings-switchInput:checked
+  + .jp-AudioSettings-switchTrack
+  .jp-AudioSettings-switchThumb {
+  transform: translateX(16px);
+}
+
+.jp-AudioSettings-switchInput:focus-visible + .jp-AudioSettings-switchTrack {
+  outline: 2px solid var(--jp-brand-color1);
+  outline-offset: 2px;
+}
+
+.jp-AudioSettings-switchInput:disabled + .jp-AudioSettings-switchTrack {
+  opacity: 0.5;
+}
+
+.jp-AudioSettings-switch:has(.jp-AudioSettings-switchInput:disabled) {
+  cursor: default;
+}
+
+.jp-AudioSettings-switchLabel {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 /*

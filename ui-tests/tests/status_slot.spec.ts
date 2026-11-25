@@ -8,7 +8,7 @@ import * as path from 'path';
  * two items in it: one on this extension's audio:toggle command, and one on a command no
  * extension registers, as when the extension that contributes it is disabled.
  *
- * ACC-CTRL-99 to 101: the gear that ends the pill and the settings panel it opens. A user
+ * ACC-CTRL-99 to 101: the gear that ends the pill and the Audio Settings tab it opens. A user
  * "toolbar" setting of the card list names one card no extension makes.
  *
  * ACC-STATUS-37 (jupyterlab_dictation_extension): the pill without these user settings, in a
@@ -19,7 +19,9 @@ const PLUGIN = '@stellarshenson/jupyterlab-audio-extension:plugin';
 const CARDS = '@stellarshenson/jupyterlab-audio-extension:cards';
 const PILL = '.jp-Audio-pill';
 const GEAR = `${PILL} [data-vc-control="gear"]`;
-const PANEL = '.jp-AudioSettings';
+const SETTINGS_TAB = '.jp-AudioSettings';
+const BOARD = `${SETTINGS_TAB} .jp-AudioSettings-board`;
+const EMPTY_CARD = `${SETTINGS_TAB} .jp-AudioSettings-emptyCard`;
 
 test.use({
   mockSettings: {
@@ -121,12 +123,15 @@ test('ACC-CTRL-98-SPACING: 8 px or more of space between the pill and the status
   expect(gaps[1]).toBeGreaterThanOrEqual(8);
 });
 
-test('ACC-CTRL-99-GEAR: the gear ends the pill and opens a panel above it that a second click, Escape or a click outside closes', async ({
+test('ACC-CTRL-99-GEAR: the gear opens one Audio Settings tab in the main area and a second click focuses it', async ({
   page
 }) => {
   const pill = page.locator(PILL);
   const gear = page.locator(GEAR);
-  const panel = page.locator(PANEL);
+  const tab = page
+    .getByRole('main')
+    .getByRole('tab', { name: 'Audio Settings' });
+  const content = page.locator(SETTINGS_TAB);
   await expect(gear).toBeVisible();
   await expect(
     pill.locator('.jp-Audio-slot [data-jp-item-name="slot-item"]')
@@ -162,105 +167,116 @@ test('ACC-CTRL-99-GEAR: the gear ends the pill and opens a panel above it that a
   expect(marks[0]).not.toBe('none');
   expect(marks[1]).toBe('none');
 
-  await expect(panel).toHaveCount(0);
+  // Nothing is open before the click, and the gear keeps no expanded state.
+  await expect(tab).toHaveCount(0);
+  await expect(content).toHaveCount(0);
+  expect(await gear.getAttribute('aria-haspopup')).toBeNull();
+  expect(await gear.getAttribute('aria-expanded')).toBeNull();
+
   await gear.click();
-  await expect(panel).toBeVisible();
-  await expect(gear).toHaveAttribute('aria-expanded', 'true');
-  // Galata swaps the code font for a web font, which the browser fetches when the panel first
-  // shows text in it. The font arrives after the popup placed the panel and wraps the delivery
-  // row; the popup places the taller panel again in the next frame, before that frame is
-  // painted. A box read in between is of a layout that no frame shows.
+  await expect(tab).toHaveCount(1);
+  await expect(tab).toHaveAttribute('aria-selected', 'true');
+  await expect(content).toBeVisible();
+
+  // A second click focuses the same tab: switch away, then click the gear again.
   await page.evaluate(async () => {
-    await document.fonts.ready;
-    await new Promise(resolve =>
-      requestAnimationFrame(() => requestAnimationFrame(resolve))
-    );
+    await (window as any).jupyterapp.commands.execute('launcher:create');
   });
-  // Above the gear and the status bar, starting at the gear's left edge, inside the window.
-  const panelBox = (await panel.boundingBox())!;
-  const barBox = (await page.locator('#jp-main-statusbar').boundingBox())!;
-  expect(panelBox.y + panelBox.height).toBeLessThanOrEqual(gearBox.y);
-  expect(panelBox.y + panelBox.height).toBeLessThanOrEqual(barBox.y);
-  expect(panelBox.y).toBeGreaterThanOrEqual(0);
-  expect(Math.abs(panelBox.x - gearBox.x)).toBeLessThanOrEqual(1);
-  // Flat while open: the status bar paints a clicked item in the brand colour.
-  expect(
-    await gear.evaluate(node => getComputedStyle(node).backgroundColor)
-  ).toBe('rgba(0, 0, 0, 0)');
-
-  await page.keyboard.press('Escape');
-  await expect(panel).toHaveCount(0);
-  await expect(gear).toBeFocused();
-  await expect(gear).toHaveAttribute('aria-expanded', 'false');
-
+  await expect(tab).toHaveAttribute('aria-selected', 'false');
   await gear.click();
-  await expect(panel).toBeVisible();
-  await panel.locator('.jp-AudioSettings-cardHeader').first().click();
-  await expect(panel).toBeVisible();
-  // The logo: outside the panel and the gear, and a click on it does nothing else.
-  await page.locator('#jp-MainLogo').click();
-  await expect(panel).toHaveCount(0);
+  await expect(tab).toHaveCount(1);
+  await expect(tab).toHaveAttribute('aria-selected', 'true');
+  await expect(content).toBeVisible();
 
+  // Closing the tab ends it.
+  await tab.locator('.lm-TabBar-tabCloseIcon').click();
+  await expect(tab).toHaveCount(0);
+  await expect(content).toHaveCount(0);
+
+  // A later click opens a fresh tab.
   await gear.click();
-  await expect(panel).toBeVisible();
-  await gear.click();
-  await expect(panel).toHaveCount(0);
+  await expect(tab).toHaveCount(1);
+  await expect(content).toBeVisible();
 });
 
-test('ACC-CTRL-100-SUMMARY: the audio card states capture off and on, playback and where captured audio goes', async ({
+test('ACC-CTRL-106-BOARD: the board shows two columns wide and one column narrow', async ({
   page
 }) => {
-  const panel = page.locator(PANEL);
-  const row = (name: string) => panel.locator(`[data-vc-summary="${name}"]`);
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.locator(GEAR).click();
+  const board = page.locator(BOARD);
+  await expect(board).toBeVisible();
+  const columns = () =>
+    board.evaluate(
+      node => getComputedStyle(node).gridTemplateColumns.split(' ').length
+    );
+  await expect.poll(columns).toBe(2);
+
+  await page.setViewportSize({ width: 700, height: 900 });
+  await expect.poll(columns).toBe(1);
+});
+
+test('ACC-CTRL-100-SUMMARY: the Audio system card states capture off and on, playback and where captured audio goes', async ({
+  page
+}) => {
+  const content = page.locator(SETTINGS_TAB);
+  const row = (name: string) => content.locator(`[data-vc-summary="${name}"]`);
   await page.locator(GEAR).click();
   await expect(
-    panel.locator('.jp-AudioSettings-cardHeader').first()
-  ).toHaveText('Audio');
+    content.locator('.jp-AudioSettings-cardHeader').first()
+  ).toHaveText('Audio system');
   await expect(row('microphone')).toHaveText('Not capturing');
   // The runner holds no speaker FIFO, as CI holds none: the open card follows the sink.
+  await expect(row('audioSystem')).toHaveText('Unavailable');
   const speaker = path.join(
     path.dirname(process.env.VOICE_TEST_SINK!),
     'speaker.fifo'
   );
   await expect(row('playback')).toHaveText('Audio output is unavailable');
   expect(spawnSync('mkfifo', [speaker]).status).toBe(0);
-  try {
-    await expect(row('playback')).toHaveText('Nothing playing', {
-      timeout: 10000
-    });
-  } finally {
-    fs.unlinkSync(speaker);
-  }
-  await expect(row('delivery')).toHaveText(process.env.VOICE_TEST_SINK!);
-  // A summary only: the audio card holds no control.
-  await expect(
-    panel
-      .locator('.jp-AudioSettings-card')
-      .first()
-      .locator('input, select, button, a')
-  ).toHaveCount(0);
-
-  // The command, not the microphone button: a click outside the panel closes it.
   const toggle = () =>
     page.evaluate(() =>
       (window as any).jupyterapp.commands.execute('audio:toggle')
     );
-  await toggle();
-  await expect(row('microphone')).toHaveText('Capturing', { timeout: 15000 });
-  await toggle();
-  await expect(row('microphone')).toHaveText('Not capturing');
+  try {
+    await expect(row('playback')).toHaveText('Nothing playing', {
+      timeout: 10000
+    });
+    await expect(row('audioSystem')).toHaveText('Ready');
+
+    await toggle();
+    await expect(row('microphone')).toHaveText('Capturing', {
+      timeout: 15000
+    });
+    await expect(row('audioSystem')).toHaveText('In use');
+    await toggle();
+    await expect(row('microphone')).toHaveText('Not capturing');
+    await expect(row('audioSystem')).toHaveText('Ready');
+  } finally {
+    fs.unlinkSync(speaker);
+  }
+  await expect(row('delivery')).toHaveText(process.env.VOICE_TEST_SINK!);
+  // The Audio system card is a summary only: it holds no control.
+  await expect(
+    content
+      .locator('.jp-AudioSettings-card')
+      .first()
+      .locator('input, select, button, a')
+  ).toHaveCount(0);
 });
 
-test('ACC-CTRL-101-CARDS: with no extension that adds a card, the panel holds the audio card alone', async ({
+test('ACC-CTRL-101-CARDS: with no extension that adds a card, the board shows the Panel cards empty card', async ({
   page
 }) => {
-  const panel = page.locator(PANEL);
+  const content = page.locator(SETTINGS_TAB);
   await page.locator(GEAR).click();
-  await expect(panel).toBeVisible();
-  // The audio-only runner: dictation, which adds the Transcription card, is not installed.
-  await expect(panel.locator('.jp-AudioSettings-card')).toHaveCount(1);
+  const empty = page.locator(EMPTY_CARD);
+  await expect(empty).toBeVisible();
+  await expect(empty.locator('.jp-AudioSettings-empty')).toHaveText(
+    'No cards from other extensions.'
+  );
   // "card-missing" names a card no extension makes, as after its extension is disabled.
-  const absent = panel.locator(
+  const absent = content.locator(
     '.jp-AudioSettings-cards > :not(.jp-AudioSettings-card)'
   );
   await expect(absent).toHaveCount(1);

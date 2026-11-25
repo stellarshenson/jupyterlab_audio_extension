@@ -19,6 +19,8 @@ import type { AudioCapture, AudioCaptureState } from '../audio-capture';
 
 import { createCards } from '../cards';
 
+import { AudioSettings } from '../settings';
+
 import { VoiceStatus } from '../status';
 
 /** jsdom has no server: the player route answers from these fixtures. */
@@ -37,13 +39,26 @@ const IDLE = {
 };
 const PLAYING = { ...IDLE, playing: [{ id: 1 }] };
 
-// jsdom has no ResizeObserver; the status bar popup makes one for a panel of changing size.
-(window as any).ResizeObserver = class {
-  observe(): void {
-    // jsdom lays nothing out
-  }
-  disconnect(): void {
-    // nothing observed
+/** The settings plugin of the tab and the card list. */
+const PLUGIN_ID = '@stellarshenson/jupyterlab-audio-extension:plugin';
+const CARDS_ID = '@stellarshenson/jupyterlab-audio-extension:cards';
+
+/** The plugin schema the tab binds, with the fields of schema/plugin.json. */
+const PLUGIN_SCHEMA = {
+  type: 'object',
+  properties: {
+    autoConnect: {
+      type: 'boolean',
+      title: 'Auto-connect on startup',
+      description:
+        'Start microphone capture automatically when JupyterLab loads. Off by default - capture normally begins only when you click the status-bar microphone.',
+      default: false
+    },
+    toolbar: {
+      type: 'array',
+      items: { type: 'object' },
+      default: []
+    }
   }
 };
 
@@ -64,16 +79,16 @@ class Model {
   message = '';
   readonly stateChanged = new Signal<this, AudioCaptureState>(this);
   readonly toggle = jest.fn();
+  readonly enable = jest.fn();
 }
 
 let model: Model;
-let widget: VoiceStatus;
+let status: VoiceStatus;
+let tab: AudioSettings | null = null;
+let opened: jest.Mock;
 
-/** Makes the pill on the page; the player route answers state. */
-async function create(
-  state: object = IDLE,
-  cards?: () => Widget
-): Promise<void> {
+/** The pill on the page; the player route answers state. */
+async function createStatus(state: object = IDLE): Promise<void> {
   jest.spyOn(ServerConnection, 'makeRequest').mockImplementation(
     async () =>
       new Response(JSON.stringify(state), {
@@ -82,114 +97,174 @@ async function create(
       })
   );
   model = new Model();
-  widget = new VoiceStatus(
-    model as unknown as AudioCapture,
-    SETTINGS,
-    undefined,
-    cards
-  );
-  Widget.attach(widget, document.body);
+  opened = jest.fn();
+  status = new VoiceStatus(model as unknown as AudioCapture, SETTINGS, opened);
+  Widget.attach(status, document.body);
   await settle();
 }
 
+/** The Audio Settings tab, built on the pill's status. */
+async function createTab(
+  options: { registry?: SettingRegistry | null; cards?: () => Widget } = {}
+): Promise<void> {
+  tab = new AudioSettings(status, options.registry ?? null, options.cards);
+  Widget.attach(tab, document.body);
+}
+
+async function create(
+  state: object = IDLE,
+  options: { registry?: SettingRegistry | null; cards?: () => Widget } = {}
+): Promise<void> {
+  await createStatus(state);
+  await createTab(options);
+}
+
 afterEach(() => {
-  widget.dispose();
+  tab?.dispose();
+  tab = null;
+  status.dispose();
   jest.restoreAllMocks();
 });
 
 function gear(): HTMLButtonElement {
-  return widget.node.querySelector('[data-vc-control="gear"]')!;
+  return status.node.querySelector('[data-vc-control="gear"]')!;
 }
 
-function panel(): HTMLElement | null {
-  return document.querySelector('.jp-AudioSettings');
+function root(): HTMLElement {
+  return tab!.node;
 }
 
-/** The value the open audio card shows in one row. */
+function board(): HTMLElement {
+  return root().querySelector('.jp-AudioSettings-board')!;
+}
+
+/** The value the Audio system card shows in one row. */
 function row(name: string): string | null {
-  return panel()!.querySelector(`[data-vc-summary="${name}"]`)!.textContent;
+  return (
+    root().querySelector(`[data-vc-summary="${name}"]`)?.textContent ?? null
+  );
 }
 
-describe('VoiceStatus gear and settings panel', () => {
-  it('ACC-CTRL-99: the gear is the last control of the pill, after a divider', async () => {
-    await create();
-    const children = Array.from(widget.node.children);
+function switchInput(): HTMLInputElement {
+  return root().querySelector('.jp-AudioSettings-switchInput')!;
+}
+
+function settingDescription(): HTMLElement {
+  return root().querySelector('.jp-AudioSettings-settingDescription')!;
+}
+
+function toolbarList(): HTMLElement {
+  return root().querySelector('.jp-AudioSettings-toolbar')!;
+}
+
+function emptyCard(): HTMLElement {
+  return root().querySelector('.jp-AudioSettings-emptyCard')!;
+}
+
+/** The cards the board shows, top to bottom, in DOM order. */
+function cards(): HTMLElement[] {
+  return Array.from(
+    root().querySelectorAll<HTMLElement>('.jp-AudioSettings-card')
+  ).filter(node => !node.hidden && !node.classList.contains('lm-mod-hidden'));
+}
+
+function titles(): string[] {
+  return cards().map(
+    node =>
+      node.querySelector('.jp-AudioSettings-cardHeader')?.textContent ??
+      node.textContent!
+  );
+}
+
+const CORE = ['Audio system', 'Capture', 'Status bar'];
+
+describe('VoiceStatus gear', () => {
+  it('ACC-CTRL-99-GEAR: the gear ends the pill and calls the open-settings callback', async () => {
+    await createStatus();
+    const children = Array.from(status.node.children);
 
     expect(children[children.length - 1]).toBe(gear());
     expect(
       children[children.length - 2].classList.contains('jp-Audio-divider')
     ).toBe(true);
     expect(gear().getAttribute('aria-label')).toBe('Audio settings');
-    expect(gear().getAttribute('aria-expanded')).toBe('false');
-    expect(gear().querySelector('svg')).not.toBeNull();
-    expect(panel()).toBeNull();
+    expect(gear().hasAttribute('aria-haspopup')).toBe(false);
+    expect(gear().hasAttribute('aria-expanded')).toBe(false);
+    expect(status.node.querySelector('.jp-AudioSettings')).toBeNull();
+
+    gear().click();
+    expect(opened).toHaveBeenCalledTimes(1);
+    // A second click never closes anything: the callback is asked again and the tab stays.
+    gear().click();
+    expect(opened).toHaveBeenCalledTimes(2);
+    expect(document.querySelector('.jp-AudioSettings')).toBeNull();
   });
+});
 
-  it('ACC-CTRL-99: a click on the gear opens the panel and a second click closes it', async () => {
+describe('AudioSettings tab board', () => {
+  it('ACC-CTRL-106-BOARD: the tab holds the page heading, the four core cards and the footer', async () => {
     await create();
-    gear().click();
 
-    expect(panel()!.getAttribute('role')).toBe('dialog');
-    expect(document.body.contains(panel())).toBe(true);
-    expect(widget.node.contains(panel())).toBe(false);
-    expect(gear().getAttribute('aria-expanded')).toBe('true');
-    expect(document.activeElement).toBe(panel());
-
-    gear().click();
-    expect(panel()).toBeNull();
-    expect(gear().getAttribute('aria-expanded')).toBe('false');
-
-    gear().click();
-    expect(panel()).not.toBeNull();
-  });
-
-  it('ACC-CTRL-99: Escape closes the panel and the gear takes the focus back', async () => {
-    await create();
-    gear().click();
-    panel()!.dispatchEvent(
-      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
+    expect(root().querySelector('h1')!.textContent).toBe('Audio Settings');
+    expect(
+      root().querySelector('.jp-AudioSettings-subtitle')!.textContent
+    ).toBe('Microphone capture and playback. Changes save immediately.');
+    const sections = Array.from(board().children).filter(node =>
+      node.classList.contains('jp-AudioSettings-card')
     );
-
-    expect(panel()).toBeNull();
-    expect(gear().getAttribute('aria-expanded')).toBe('false');
-    expect(document.activeElement).toBe(gear());
+    expect(sections.map(card => cardToken(card as HTMLElement))).toEqual([
+      ...CORE,
+      'Panel cards'
+    ]);
+    expect(titles()).toEqual([...CORE, 'Panel cards']);
+    expect(
+      root().querySelector('.jp-AudioSettings-footer')!.textContent
+    ).toContain(
+      'Raw values: Settings Editor > Audio Capture and Audio Settings Panel.'
+    );
   });
 
-  it('ACC-CTRL-99: a click outside the panel closes it and a click inside does not', async () => {
+  it('ACC-CTRL-99-TAB: the tab disposes with the status widget and stops following it', async () => {
     await create();
-    gear().click();
-    panel()!.querySelector<HTMLElement>('.jp-AudioSettings-row')!.click();
-    expect(panel()).not.toBeNull();
+    const microphone = root().querySelector('[data-vc-summary="microphone"]')!;
+    expect(microphone.textContent).toBe('Not capturing');
 
-    // A real click outside moves the focus before it closes the panel: the gear leaves it there.
-    panel()!.blur();
-    document.body.click();
-    expect(panel()).toBeNull();
-    expect(document.activeElement).not.toBe(gear());
+    status.dispose();
+    expect(tab!.isDisposed).toBe(true);
+    model.state = 'streaming';
+    model.stateChanged.emit('streaming');
+    await settle();
+    expect(microphone.textContent).toBe('Not capturing');
   });
 
-  it('ACC-CTRL-99: the open panel goes away with the pill', async () => {
+  it('ACC-CTRL-99-TAB: closing the tab disposes it', async () => {
     await create();
-    gear().click();
-    widget.dispose();
 
-    expect(panel()).toBeNull();
+    tab!.close();
+    expect(tab!.isDisposed).toBe(true);
   });
+});
 
-  it('ACC-CTRL-100: the audio card states the microphone, playback and where captured audio goes', async () => {
+/** The header text of a card, or its text for another extension's headerless card. */
+function cardToken(card: HTMLElement): string {
+  return (
+    card.querySelector('.jp-AudioSettings-cardHeader')?.textContent ??
+    card.textContent!
+  );
+}
+
+describe('AudioSettings Audio system card', () => {
+  it('ACC-CTRL-100-SUMMARY: the card states the audio system, microphone, playback and destination', async () => {
     await create();
-    gear().click();
 
+    expect(row('audioSystem')).toBe('Ready');
     expect(row('microphone')).toBe('Not capturing');
     expect(row('playback')).toBe('Nothing playing');
     expect(row('delivery')).toBe(FIFO);
-    // A summary: the audio card holds no setting.
-    expect(panel()!.querySelector('input, select, button, a')).toBeNull();
   });
 
-  it('ACC-CTRL-100: the open audio card follows the microphone', async () => {
+  it('ACC-CTRL-100-SUMMARY: the card follows the microphone and the audio system', async () => {
     await create();
-    gear().click();
     const turn = (state: AudioCaptureState, message = ''): void => {
       model.state = state;
       model.message = message;
@@ -198,42 +273,51 @@ describe('VoiceStatus gear and settings panel', () => {
 
     turn('connecting');
     expect(row('microphone')).toBe('Connecting');
+    expect(row('audioSystem')).toBe('Ready');
     turn('streaming');
     expect(row('microphone')).toBe('Capturing');
+    expect(row('audioSystem')).toBe('In use');
     turn('error', 'Microphone permission denied.');
     expect(row('microphone')).toBe('Microphone permission denied.');
+    expect(row('audioSystem')).toBe('Ready');
     turn('error');
     expect(row('microphone')).toBe('Error');
     turn('idle');
     expect(row('microphone')).toBe('Not capturing');
   });
 
+  it('ACC-CTRL-100-SUMMARY: a playing file puts the audio system in use', async () => {
+    await create(PLAYING);
+
+    expect(row('audioSystem')).toBe('In use');
+    expect(row('playback')).toBe('Playing');
+  });
+
   it.each([
-    ['a playing file', PLAYING, 'Playing'],
-    ['a paused file', { ...PLAYING, paused: true }, 'Paused'],
     [
       'a missing speaker sink',
       { ...IDLE, sink: { state: 'missing' } },
+      'Unavailable',
       'Audio output is unavailable'
     ],
     [
       'a shut-down speaker sink',
       { ...PLAYING, sink: { state: 'off' } },
+      'Shut down',
       'Audio output is shut down'
     ]
   ])(
-    'ACC-CTRL-100: the audio card states playback for %s',
-    async (_, state, words) => {
+    'ACC-CTRL-100-SUMMARY: the card states the audio system and playback for %s',
+    async (_, state, audioSystem, playback) => {
       await create(state);
-      gear().click();
 
-      expect(row('playback')).toBe(words);
+      expect(row('audioSystem')).toBe(audioSystem);
+      expect(row('playback')).toBe(playback);
     }
   );
 
-  it('ACC-CTRL-100: the open audio card follows the player', async () => {
+  it('ACC-CTRL-100-SUMMARY: the card follows the player', async () => {
     await create(PLAYING);
-    gear().click();
     expect(row('playback')).toBe('Playing');
 
     jest.spyOn(ServerConnection, 'makeRequest').mockImplementation(
@@ -243,80 +327,80 @@ describe('VoiceStatus gear and settings panel', () => {
           headers: { 'Content-Type': 'application/json' }
         })
     );
-    // The stop button asks the player and paints its answer, as the 2 s poll does. The click
-    // does not bubble: a click that reaches the page is a click outside the panel.
-    widget.node
+    // The stop button asks the player and paints its answer, as the 2 s poll does.
+    status.node
       .querySelector<HTMLButtonElement>('[data-vc-control="play"]')!
       .dispatchEvent(new MouseEvent('click'));
     await settle();
     expect(row('playback')).toBe('Nothing playing');
+    expect(row('audioSystem')).toBe('Ready');
   });
 
-  it('ACC-CTRL-100: a server that does not report the capture FIFO leaves the target unknown', async () => {
+  it('ACC-CTRL-100-SUMMARY: a server that does not report the capture FIFO leaves the target unknown', async () => {
     const { capture, ...old } = IDLE;
     await create(old);
-    gear().click();
 
     expect(capture).toBe(FIFO);
     expect(row('delivery')).toBe('Unknown');
   });
 });
 
-/** The settings plugin of the card list, as the server serves schema/cards.json. */
-const CARDS_ID = '@stellarshenson/jupyterlab-audio-extension:cards';
-
-function plugin(id: string, schema: object): any {
-  return {
-    id,
-    schema,
-    raw: '{}',
-    data: { composite: {}, user: {} },
-    version: '1.0.0'
-  };
-}
-
-/** Another extension's settings schema that adds cards through "AudioSettings". */
-function contributor(id: string, cards: object[]): any {
-  return plugin(id, {
-    type: 'object',
-    properties: {},
-    'jupyter.lab.toolbars': { AudioSettings: cards }
-  });
-}
-
-/** A card widget as another extension's factory returns it. */
-function card(title: string): Widget {
-  const widget = new Widget();
-  widget.addClass('jp-AudioSettings-card');
-  widget.node.textContent = title;
-  return widget;
-}
-
-/** The titles of the cards the open panel shows, top to bottom. */
-function titles(): string[] {
-  return Array.from(
-    panel()!.querySelectorAll<HTMLElement>('.jp-AudioSettings-card')
-  )
-    .filter(node => !node.classList.contains('lm-mod-hidden'))
-    .map(
-      node =>
-        node.querySelector('.jp-AudioSettings-cardHeader')?.textContent ??
-        node.textContent!
-    );
-}
-
-describe('AudioSettings extension point', () => {
-  let toolbarRegistry: ToolbarWidgetRegistry;
+describe('AudioSettings Capture card', () => {
   let settingRegistry: SettingRegistry;
+  let toolbarRegistry: ToolbarWidgetRegistry;
+
+  function plugin(id: string, schema: object): any {
+    return {
+      id,
+      schema,
+      raw: '{}',
+      data: { composite: {}, user: {} },
+      version: '1.0.0'
+    };
+  }
+
+  /** Another extension's settings schema that adds cards through "AudioSettings". */
+  function contributor(id: string, cards: object[]): any {
+    return plugin(id, {
+      type: 'object',
+      properties: {},
+      'jupyter.lab.toolbars': { AudioSettings: cards }
+    });
+  }
+
+  /** A card widget as another extension's factory returns it. */
+  function card(title: string): Widget {
+    const widget = new Widget();
+    widget.addClass('jp-AudioSettings-card');
+    widget.node.textContent = title;
+    return widget;
+  }
 
   /** The registries of a JupyterLab that holds the given extensions' schemas. */
-  function registries(contributors: any[]): void {
-    const plugins = [plugin(CARDS_ID, cardsSchema), ...contributors];
+  function registries(contributors: any[], holdCards = false): void {
+    const raws = new Map<string, string>();
+    let release = (): void => undefined;
+    const gate = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    releaseCards = release;
+    const plugins = [plugin(PLUGIN_ID, PLUGIN_SCHEMA), ...contributors];
     settingRegistry = new SettingRegistry({
       connector: {
-        fetch: async (id: string) => plugins.find(item => item.id === id),
+        fetch: async (id: string) => {
+          if (id === CARDS_ID && holdCards) {
+            await gate;
+          }
+          const item =
+            id === CARDS_ID
+              ? plugin(CARDS_ID, cardsSchema)
+              : plugins.find(value => value.id === id);
+          return item && { ...item, raw: raws.get(id) ?? item.raw };
+        },
         list: async () => ({ ids: [], values: [] }),
-        save: async () => undefined,
+        save: async (id: string, raw: string) => {
+          raws.set(id, raw);
+        },
         remove: async () => undefined
       } as any,
       plugins
@@ -326,83 +410,156 @@ describe('AudioSettings extension point', () => {
     });
   }
 
-  it('ACC-CTRL-101: cards follow the audio card in rank order, whatever the order they were added in', async () => {
+  let releaseCards: () => void = () => undefined;
+
+  it('ACC-CTRL-107-AUTOCONNECT: the switch reads the setting, saves it and follows a later change', async () => {
+    registries([]);
+    await create(IDLE, { registry: settingRegistry });
+    const settings = await settingRegistry.load(PLUGIN_ID);
+    await until(() =>
+      settingDescription().textContent!.includes(
+        'Start microphone capture automatically'
+      )
+    );
+
+    expect(switchInput().disabled).toBe(false);
+    expect(switchInput().checked).toBe(false);
+    switchInput().checked = true;
+    switchInput().dispatchEvent(new Event('change'));
+    await until(() => settings.get('autoConnect').composite === true);
+    expect(settings.get('autoConnect').composite).toBe(true);
+
+    // A later change, as the Settings Editor makes it, updates the switch.
+    await settings.set('autoConnect', false);
+    await until(() => switchInput().checked === false);
+    expect(switchInput().checked).toBe(false);
+
+    // The switch starts no capture now.
+    expect(model.enable).not.toHaveBeenCalled();
+    expect(model.toggle).not.toHaveBeenCalled();
+  });
+
+  it('ACC-CTRL-106-BOARD: the Status bar card lists each pill item or No items', async () => {
+    registries([]);
+    await create(IDLE, { registry: settingRegistry });
+    const settings = await settingRegistry.load(PLUGIN_ID);
+    await until(() => toolbarList().textContent === 'No items');
+    expect(
+      toolbarList().querySelector('.jp-AudioSettings-empty')!.textContent
+    ).toBe('No items');
+    expect(
+      root().querySelector('.jp-AudioSettings-hint')!.textContent
+    ).toContain('Settings Editor > Audio Capture');
+
+    await settings.set('toolbar', [
+      { name: 'slot-item', command: 'audio:toggle' }
+    ]);
+    await until(
+      () => toolbarList().querySelectorAll('.jp-AudioSettings-row').length === 1
+    );
+    const item = toolbarList().querySelector('.jp-AudioSettings-row')!;
+    expect(item.querySelector('.jp-AudioSettings-label')!.textContent).toBe(
+      'slot-item'
+    );
+    expect(item.querySelector('.jp-AudioSettings-value')!.textContent).toBe(
+      'audio:toggle'
+    );
+    expect(toolbarList().querySelector('.jp-AudioSettings-empty')).toBeNull();
+  });
+
+  it('ACC-CTRL-101-CARDS: extension cards are tiles of the board in rank order', async () => {
     registries([
       contributor('late:plugin', [{ name: 'late', rank: 30 }]),
       contributor('early:plugin', [{ name: 'early', rank: 10 }])
     ]);
     toolbarRegistry.addFactory('AudioSettings', 'late', () => card('Late'));
     toolbarRegistry.addFactory('AudioSettings', 'early', () => card('Early'));
-    await create(IDLE, createCards(toolbarRegistry, settingRegistry));
+    await create(IDLE, {
+      registry: settingRegistry,
+      cards: createCards(toolbarRegistry, settingRegistry)
+    });
     await settingRegistry.load(CARDS_ID);
-    await settle();
+    await until(() => titles().includes('Early'));
 
-    gear().click();
-    expect(titles()).toEqual(['Audio', 'Early', 'Late']);
+    expect(titles()).toEqual([...CORE, 'Early', 'Late']);
+    // The empty Panel cards card hides while an extension card shows.
+    expect(emptyCard().hidden).toBe(true);
   });
 
-  it('ACC-CTRL-101: cards whose list loads after the panel opened appear in it', async () => {
-    registries([contributor('early:plugin', [{ name: 'early', rank: 10 }])]);
+  it('ACC-CTRL-101-CARDS: cards whose list loads after the tab opened appear in it', async () => {
+    registries(
+      [contributor('early:plugin', [{ name: 'early', rank: 10 }])],
+      true
+    );
     toolbarRegistry.addFactory('AudioSettings', 'early', () => card('Early'));
-    let cards: () => Widget;
-    await create(IDLE, () => cards());
+    await create(IDLE, {
+      registry: settingRegistry,
+      cards: createCards(toolbarRegistry, settingRegistry)
+    });
 
-    // The list starts to load here, and the panel opens before the load ends.
-    cards = createCards(toolbarRegistry, settingRegistry);
-    gear().click();
-    expect(titles()).toEqual(['Audio']);
-    await until(() => titles().length === 2);
-    expect(titles()).toEqual(['Audio', 'Early']);
+    expect(titles()).toEqual([...CORE, 'Panel cards']);
+    expect(emptyCard().hidden).toBe(false);
+
+    releaseCards();
+    await settingRegistry.load(CARDS_ID);
+    await until(() => titles().includes('Early'));
+    expect(titles()).toEqual([...CORE, 'Early']);
+    expect(emptyCard().hidden).toBe(true);
   });
 
-  it('ACC-CTRL-101: a disposed card leaves the panel and each opening makes the cards anew', async () => {
+  it('ACC-CTRL-101-CARDS: a disposed card leaves the board and the empty card returns', async () => {
     registries([contributor('early:plugin', [{ name: 'early', rank: 10 }])]);
     const made: Widget[] = [];
     toolbarRegistry.addFactory('AudioSettings', 'early', () => {
       made.push(card('Early'));
       return made[made.length - 1];
     });
-    await create(IDLE, createCards(toolbarRegistry, settingRegistry));
+    await create(IDLE, {
+      registry: settingRegistry,
+      cards: createCards(toolbarRegistry, settingRegistry)
+    });
     await settingRegistry.load(CARDS_ID);
-    await settle();
+    await until(() => titles().includes('Early'));
+    expect(titles()).toEqual([...CORE, 'Early']);
 
-    gear().click();
-    expect(titles()).toEqual(['Audio', 'Early']);
     made[0].dispose();
-    expect(titles()).toEqual(['Audio']);
-
-    gear().click();
-    gear().click();
-    expect(made).toHaveLength(2);
-    expect(titles()).toEqual(['Audio', 'Early']);
-    gear().click();
-    expect(made[1].isDisposed).toBe(true);
+    await until(() => !titles().includes('Early'));
+    expect(titles()).toEqual([...CORE, 'Panel cards']);
+    expect(emptyCard().hidden).toBe(false);
   });
 
-  it('ACC-CTRL-101: an extension that is absent or registered no card adds nothing', async () => {
+  it('ACC-CTRL-101-CARDS: an extension that is absent or registered no card adds nothing', async () => {
     // "gone" names a card whose extension registered no factory, as a disabled one does not.
     registries([contributor('gone:plugin', [{ name: 'gone', rank: 10 }])]);
-    await create(IDLE, createCards(toolbarRegistry, settingRegistry));
+    await create(IDLE, {
+      registry: settingRegistry,
+      cards: createCards(toolbarRegistry, settingRegistry)
+    });
     await settingRegistry.load(CARDS_ID);
     await settle();
 
-    gear().click();
-    expect(titles()).toEqual(['Audio']);
-    const cards = panel()!.querySelector('.jp-AudioSettings-cards')!;
-    expect(cards.children).toHaveLength(1);
-    expect(cards.children[0].classList.contains('lm-mod-hidden')).toBe(true);
+    expect(titles()).toEqual([...CORE, 'Panel cards']);
+    expect(emptyCard().hidden).toBe(false);
+    const absent = root().querySelector('.jp-AudioSettings-cards')!;
+    expect(absent.children).toHaveLength(1);
+    expect(absent.children[0].classList.contains('lm-mod-hidden')).toBe(true);
 
-    // The extension registers its card while the panel is open: the card takes the place.
+    // The extension registers its card while the tab is open: the card takes the place.
     toolbarRegistry.addFactory('AudioSettings', 'gone', () => card('Back'));
-    expect(titles()).toEqual(['Audio', 'Back']);
-    expect(cards.children).toHaveLength(1);
+    await until(() => titles().includes('Back'));
+    expect(titles()).toEqual([...CORE, 'Back']);
+    expect(emptyCard().hidden).toBe(true);
   });
 
-  it('ACC-CTRL-101: without the registries the panel holds the audio card alone', async () => {
+  it('ACC-CTRL-101-CARDS: without the registries the board holds the core cards alone', async () => {
     await create();
-    gear().click();
 
-    expect(titles()).toEqual(['Audio']);
-    expect(panel()!.querySelector('.jp-AudioSettings-cards')).toBeNull();
+    expect(switchInput().disabled).toBe(true);
+    expect(
+      toolbarList().querySelector('.jp-AudioSettings-empty')!.textContent
+    ).toBe('No items');
+    expect(titles()).toEqual([...CORE, 'Panel cards']);
+    expect(root().querySelector('.jp-AudioSettings-cards')).toBeNull();
+    expect(emptyCard().hidden).toBe(false);
   });
 });

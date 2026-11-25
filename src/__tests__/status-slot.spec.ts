@@ -52,6 +52,7 @@ beforeEach(() => {
   widget = new VoiceStatus(
     new Model() as unknown as AudioCapture,
     SETTINGS,
+    () => undefined,
     slot
   );
   Widget.attach(widget, document.body);

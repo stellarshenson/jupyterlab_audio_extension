@@ -122,7 +122,11 @@ function create(
   model.state = state;
   model.message = message;
   return {
-    widget: new VoiceStatus(model as unknown as AudioCapture, SETTINGS),
+    widget: new VoiceStatus(
+      model as unknown as AudioCapture,
+      SETTINGS,
+      () => undefined
+    ),
     model
   };
 }

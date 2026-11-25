@@ -2,15 +2,15 @@ import { URLExt } from '@jupyterlab/coreutils';
 
 import { ServerConnection } from '@jupyterlab/services';
 
-import { Popup, showPopup } from '@jupyterlab/statusbar';
-
 import { LabIcon } from '@jupyterlab/ui-components';
+
+import { Signal } from '@lumino/signaling';
 
 import { PanelLayout, Widget } from '@lumino/widgets';
 
 import { AudioCapture, AudioCaptureState } from './audio-capture';
 
-import { AudioSettings } from './settings';
+import type { AudioSummary } from './settings';
 
 const STATUS_POLL_MS = 2000;
 // The missing-sink episode blinks for this long, then the lamp settles to the off ring.
@@ -124,20 +124,19 @@ const PLAYER_WORDS: Record<PlayerMode, string> = {
  * 30 s, then settles it to the off ring with both controls disabled and the plain message
  * left in the play tooltip; a deliberate shutdown shows the ring at once. An optional slot,
  * the AudioStatus toolbar that other extensions fill, sits right of the microphone. The gear
- * is the last control: it opens the settings panel above itself, and a second click, Escape
- * or a click outside the panel closes it (ACC-CTRL-99).
+ * is the last control: it asks the plugin to open the Audio Settings tab (ACC-CTRL-99).
  */
 export class VoiceStatus extends Widget {
   constructor(
     model: AudioCapture,
     settings: ServerConnection.ISettings,
-    slot?: Widget,
-    cards?: () => Widget
+    openSettings: () => void,
+    slot?: Widget
   ) {
     super();
     this._model = model;
     this._settings = settings;
-    this._cards = cards;
+    this._openSettings = openSettings;
     this.addClass('jp-Audio-status');
     this.addClass('jp-Audio-pill');
 
@@ -156,7 +155,7 @@ export class VoiceStatus extends Widget {
     this.node.appendChild(this._divider());
     this.node.appendChild(this._pause);
     this.node.appendChild(this._divider());
-    this.node.appendChild(this._gear.node);
+    this.node.appendChild(this._gear);
     if (slot) {
       this._addSlot(slot);
     }
@@ -174,11 +173,36 @@ export class VoiceStatus extends Widget {
 
   dispose(): void {
     window.clearInterval(this._timer);
-    this._popup?.dispose();
     this._slotObserver?.disconnect();
     this._stopBlink();
     this._model.stateChanged.disconnect(this._refresh, this);
     super.dispose();
+  }
+
+  /** The audio extension's state, one plain phrase per row of the Audio system card. */
+  summary(): AudioSummary {
+    const state = this._model.state;
+    return {
+      audioSystem:
+        this._sink === 'missing'
+          ? 'Unavailable'
+          : this._sink === 'off'
+            ? 'Shut down'
+            : state === 'streaming' || this._mode === 'playing'
+              ? 'In use'
+              : 'Ready',
+      microphone:
+        state === 'error'
+          ? this._model.message || CAPTURE_WORDS.error
+          : CAPTURE_WORDS[state],
+      playback:
+        this._sink === 'missing'
+          ? SINK_UNAVAILABLE
+          : this._sink === 'off'
+            ? SINK_SHUT_DOWN
+            : PLAYER_WORDS[this._mode],
+      delivery: this._capture || 'Unknown'
+    };
   }
 
   private _createMic(): HTMLButtonElement {
@@ -214,22 +238,19 @@ export class VoiceStatus extends Widget {
     return button;
   }
 
-  /** The gear is a widget because the status bar popup anchors to one. */
-  private _createGear(): Widget {
+  private _createGear(): HTMLButtonElement {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'jp-Audio-control jp-Audio-gear';
     button.dataset.vcControl = 'gear';
     button.title = GEAR_LABEL;
     button.setAttribute('aria-label', GEAR_LABEL);
-    button.setAttribute('aria-haspopup', 'dialog');
-    button.setAttribute('aria-expanded', 'false');
     const icon = document.createElement('span');
     icon.className = 'jp-Audio-icon';
     button.appendChild(icon);
     gearIcon.element({ container: icon });
     button.addEventListener('click', this._onGear);
-    return new Widget({ node: button });
+    return button;
   }
 
   private _divider(): HTMLSpanElement {
@@ -274,55 +295,10 @@ export class VoiceStatus extends Widget {
     this._model.toggle();
   };
 
-  /** Opens the settings panel above the gear, or closes the open one (ACC-CTRL-99). */
+  /** Asks the plugin to open the Audio Settings tab, or to focus it (ACC-CTRL-99). */
   private _onGear = (): void => {
-    if (this._popup) {
-      this._popup.dispose();
-      return;
-    }
-    const gear = this._gear.node;
-    const panel = new AudioSettings(this._cards?.());
-    this._panel = panel;
-    this._summarise();
-    // The popup closes itself on Escape and on a click outside the panel and the gear.
-    const popup = showPopup({
-      body: panel,
-      anchor: this._gear,
-      align: 'left',
-      // A card that loads its content after the panel opened makes the panel taller.
-      hasDynamicSize: true
-    });
-    this._popup = popup;
-    gear.setAttribute('aria-expanded', 'true');
-    popup.disposed.connect(() => {
-      // Escape closes the panel that holds the focus: the gear takes the focus back.
-      if (popup.node.contains(document.activeElement)) {
-        gear.focus();
-      }
-      gear.setAttribute('aria-expanded', 'false');
-      this._popup = null;
-      this._panel = null;
-    });
-    panel.node.focus();
+    this._openSettings();
   };
-
-  /** Writes the audio extension's state into the open panel's audio card (ACC-CTRL-100). */
-  private _summarise(): void {
-    const state = this._model.state;
-    this._panel?.summarise({
-      microphone:
-        state === 'error'
-          ? this._model.message || CAPTURE_WORDS.error
-          : CAPTURE_WORDS[state],
-      playback:
-        this._sink === 'missing'
-          ? SINK_UNAVAILABLE
-          : this._sink === 'off'
-            ? SINK_SHUT_DOWN
-            : PLAYER_WORDS[this._mode],
-      delivery: this._capture || 'Unknown'
-    });
-  }
 
   private _refresh(): void {
     const state = this._model.state;
@@ -339,7 +315,7 @@ export class VoiceStatus extends Widget {
     this._mic.title = tooltip;
     this._mic.setAttribute('aria-label', tooltip);
     this._paintLamp();
-    this._summarise();
+    this.summaryChanged.emit(this.summary());
   }
 
   private _render(mode: PlayerMode, sink?: IPlayerState['sink']): void {
@@ -378,7 +354,7 @@ export class VoiceStatus extends Widget {
     this._paintLamp();
     this._applyControls();
     this.node.dataset.vcPlayer = mode;
-    this._summarise();
+    this.summaryChanged.emit(this.summary());
   }
 
   /** Paints the leading lamp: amber fault during the blink, then the off ring; green while active. */
@@ -459,16 +435,17 @@ export class VoiceStatus extends Widget {
     void this._request('pause');
   };
 
+  /** Emits the audio extension's state on every capture change and player poll (ACC-CTRL-100). */
+  readonly summaryChanged = new Signal<this, AudioSummary>(this);
+
   private _model: AudioCapture;
   private _settings: ServerConnection.ISettings;
+  private _openSettings: () => void;
   private _lamp: HTMLSpanElement;
   private _mic: HTMLButtonElement;
   private _play: HTMLButtonElement;
   private _pause: HTMLButtonElement;
-  private _gear: Widget;
-  private _cards?: () => Widget;
-  private _popup: Popup | null = null;
-  private _panel: AudioSettings | null = null;
+  private _gear: HTMLButtonElement;
   private _capture?: string;
   private _slotObserver: MutationObserver | null = null;
   private _mode: PlayerMode = 'idle';

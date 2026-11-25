@@ -28,7 +28,10 @@ import { CONNECT_TIMEOUT_MS, AudioCapture } from './audio-capture';
 import { createCards } from './cards';
 
 // eslint-disable-next-line jupyter/prefer-lazy-imports -- activate() registers the status item at once
-import { VoiceStatus } from './status';
+import { AudioSettings } from './settings';
+
+// eslint-disable-next-line jupyter/prefer-lazy-imports -- activate() registers the status item at once
+import { VoiceStatus, gearIcon } from './status';
 
 const PLUGIN_ID = '@stellarshenson/jupyterlab-audio-extension:plugin';
 const TOGGLE_COMMAND = 'audio:toggle';
@@ -215,14 +218,38 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
     if (statusBar) {
       const slot = slotFactory ? new Toolbar() : undefined;
+      // Other extensions add cards to the settings tab through "AudioSettings".
+      const cardSource =
+        toolbarRegistry && settingRegistry
+          ? createCards(toolbarRegistry, settingRegistry)
+          : undefined;
+      let settingsTab: AudioSettings | null = null;
+      // One Audio Settings tab: the gear opens it, or focuses it when it is already open.
+      const openSettings = (): void => {
+        if (settingsTab && !settingsTab.isDisposed) {
+          app.shell.activateById(settingsTab.id);
+          return;
+        }
+        const tab = new AudioSettings(status, settingRegistry, cardSource);
+        tab.id = 'jupyterlab-audio-extension:settings';
+        // eslint-disable-next-line jupyter/no-untranslated-string -- no translator, as for TOGGLE_COMMAND
+        tab.title.label = 'Audio Settings';
+        tab.title.icon = gearIcon;
+        tab.title.closable = true;
+        app.shell.add(tab, 'main', { mode: 'tab-after' });
+        app.shell.activateById(tab.id);
+        tab.disposed.connect(() => {
+          if (settingsTab === tab) {
+            settingsTab = null;
+          }
+        });
+        settingsTab = tab;
+      };
       const status = new VoiceStatus(
         model,
         app.serviceManager.serverSettings,
-        slot,
-        // Other extensions add cards to the gear's panel through "AudioSettings".
-        toolbarRegistry && settingRegistry
-          ? createCards(toolbarRegistry, settingRegistry)
-          : undefined
+        openSettings,
+        slot
       );
       if (slotFactory) {
         setToolbar(status, slotFactory, slot);

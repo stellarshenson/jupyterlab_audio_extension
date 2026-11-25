@@ -2,6 +2,25 @@
 
 <!-- <START NEW CHANGELOG ENTRY> -->
 
+## [1.0.49] - 2026-11-26
+
+### Added
+
+- The status-bar gear opens or focuses one Audio Settings main-area tab, replacing the popup; the tab lays four cards in a responsive board: Audio system (live state), Capture (the Auto-connect on startup switch), Status bar (the pill's items) and Panel cards (the empty state while no extension card exists)
+- Extension cards from the AudioSettings extension point appear as board tiles in rank order, after the Audio system, Capture and Status bar cards
+
+### Changed
+
+- The gear no longer opens a popup; closing the tab disposes it, and the tab goes with the status item
+- The Audio system card follows the capture state and the 2 s player poll through VoiceStatus.summaryChanged
+- The README and the acceptance criteria describe the tab; the tab carries its own close control
+
+### Fixed
+
+- Closing the tab now disposes it instead of leaving a detached widget, so a later gear click opens a fresh tab
+- The Capture switch stays disabled until its setting binds, and the Status bar card shows No items when settings are unavailable
+- The live summary writes only when a value changes, keeping the FIFO path selectable through the poll; the board track shrinks with a narrow main area
+
 ## [1.0.43] - 2026-11-25
 
 ### Added
