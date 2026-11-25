@@ -1,6 +1,6 @@
 {
     "name": "@stellarshenson/jupyterlab-audio-extension",
-    "version": "1.0.5",
+    "version": "1.0.42",
     "description": "JupyterLab extension that captures microphone audio in the browser and streams it to a server-side bridge, exposing it as a virtual audio source so terminal applications running in the container (such as Claude Code voice mode) can record from the user's microphone",
     "keywords": [
         "jupyter",
@@ -63,6 +63,7 @@
         "@jupyterlab/services": "^7.6.0",
         "@jupyterlab/settingregistry": "^4.6.0",
         "@jupyterlab/statusbar": "^4.6.0",
+        "@jupyterlab/translation": "^4.6.5",
         "@jupyterlab/ui-components": "^4.6.0",
         "@lumino/signaling": "^2.1.0",
         "@lumino/widgets": "^2.10.0"
@@ -151,6 +152,7 @@
         ],
         "rules": {
             "csstree/validator": true,
+            "custom-property-pattern": "^([a-z][A-z\\d]*)(-[A-z\\d]+)*$",
             "property-no-vendor-prefix": null,
             "selector-class-pattern": "^([a-z][A-z\\d]*)(-[A-z\\d]+)*$",
             "selector-no-vendor-prefix": null,
