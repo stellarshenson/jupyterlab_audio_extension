@@ -178,6 +178,32 @@ test('ACC-CTRL-99-GEAR: the gear opens one Audio Settings tab in the main area a
   await expect(tab).toHaveAttribute('aria-selected', 'true');
   await expect(content).toBeVisible();
 
+  // ACC-CTRL-110-PAGE-CHROME: the head starts at the tab's top edge and the body scrolls
+  // under it, holding the board.
+  const head = page.locator(`${SETTINGS_TAB} .jp-AudioSettings-pageHead`);
+  const body = page.locator(`${SETTINGS_TAB} .jp-AudioSettings-body`);
+  await expect(head).toBeVisible();
+  const headBox = (await head.boundingBox())!;
+  const contentBox = (await content.boundingBox())!;
+  expect(Math.abs(headBox.y - contentBox.y)).toBeLessThanOrEqual(1);
+  await expect(body.locator('.jp-AudioSettings-board')).toBeVisible();
+  expect(await body.evaluate(node => getComputedStyle(node).overflowY)).toBe(
+    'auto'
+  );
+
+  // The Capture card holds the standard jp-switch: a click saves, a second click restores.
+  const autoConnect = page.locator(`${SETTINGS_TAB} .jp-switch`);
+  await expect(autoConnect).toBeVisible();
+  await expect(autoConnect).toHaveAttribute('role', 'switch');
+  const initial = await autoConnect.getAttribute('aria-checked');
+  await autoConnect.click();
+  await expect(autoConnect).toHaveAttribute(
+    'aria-checked',
+    initial === 'true' ? 'false' : 'true'
+  );
+  await autoConnect.click();
+  await expect(autoConnect).toHaveAttribute('aria-checked', initial!);
+
   // A second click focuses the same tab: switch away, then click the gear again.
   await page.evaluate(async () => {
     await (window as any).jupyterapp.commands.execute('launcher:create');
@@ -228,6 +254,7 @@ test('ACC-CTRL-100-SUMMARY: the Audio system card states capture off and on, pla
   await expect(row('microphone')).toHaveText('Not capturing');
   // The runner holds no speaker FIFO, as CI holds none: the open card follows the sink.
   await expect(row('audioSystem')).toHaveText('Unavailable');
+  await expect(row('audioSystem')).toHaveClass(/jp-AudioSettings-value-bad/);
   const speaker = path.join(
     path.dirname(process.env.VOICE_TEST_SINK!),
     'speaker.fifo'
@@ -243,6 +270,7 @@ test('ACC-CTRL-100-SUMMARY: the Audio system card states capture off and on, pla
       timeout: 10000
     });
     await expect(row('audioSystem')).toHaveText('Ready');
+    await expect(row('audioSystem')).toHaveClass(/jp-AudioSettings-value-ok/);
 
     await toggle();
     await expect(row('microphone')).toHaveText('Capturing', {

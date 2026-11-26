@@ -2,6 +2,24 @@
 
 <!-- <START NEW CHANGELOG ENTRY> -->
 
+## [1.0.51] - 2026-11-26
+
+### Added
+
+- The Audio system card colours each state: green for Ready, In use, Capturing and Playing; red for Unavailable, a microphone error and Audio output is unavailable; every other state keeps the default colour; the values come from per-theme custom properties and clear WCAG AA on the card in the light and the dark theme
+- The Audio Settings page is a native page: a header strip with the title and subtitle at the tab's top edge, a scrolling body holding the cards board and the footer
+
+### Changed
+
+- The Capture card's Auto-connect control is JupyterLab's standard switch (`jp-switch`, role `switch`), drawn by the theme, in place of the extension-drawn track and thumb
+- The switch carries the accessible name "Auto-connect on startup" from construction and stays disabled until the setting binds
+- The README and the acceptance criteria describe the page header, the scrolling body, the state colours and the standard switch
+
+### Fixed
+
+- The blank band between the tab bar and the page content is gone; the header starts at the tab's top edge
+- The dark-theme red uses Material red-200, which clears WCAG AA on the installed Galaxa dark themes, where the theme error step reached only 3.98:1 on the steel background
+
 ## [1.0.49] - 2026-11-26
 
 ### Added

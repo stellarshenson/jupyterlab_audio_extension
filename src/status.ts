@@ -179,29 +179,46 @@ export class VoiceStatus extends Widget {
     super.dispose();
   }
 
-  /** The audio extension's state, one plain phrase per row of the Audio system card. */
+  /** The audio extension's state, one entry per row of the Audio system card. */
   summary(): AudioSummary {
     const state = this._model.state;
     return {
-      audioSystem:
-        this._sink === 'missing'
-          ? 'Unavailable'
-          : this._sink === 'off'
-            ? 'Shut down'
-            : state === 'streaming' || this._mode === 'playing'
-              ? 'In use'
-              : 'Ready',
-      microphone:
-        state === 'error'
-          ? this._model.message || CAPTURE_WORDS.error
-          : CAPTURE_WORDS[state],
-      playback:
-        this._sink === 'missing'
-          ? SINK_UNAVAILABLE
-          : this._sink === 'off'
-            ? SINK_SHUT_DOWN
-            : PLAYER_WORDS[this._mode],
-      delivery: this._capture || 'Unknown'
+      audioSystem: {
+        text:
+          this._sink === 'missing'
+            ? 'Unavailable'
+            : this._sink === 'off'
+              ? 'Shut down'
+              : state === 'streaming' || this._mode === 'playing'
+                ? 'In use'
+                : 'Ready',
+        health:
+          this._sink === 'missing' ? 'bad' : this._sink === 'off' ? '' : 'ok'
+      },
+      microphone: {
+        text:
+          state === 'error'
+            ? this._model.message || CAPTURE_WORDS.error
+            : CAPTURE_WORDS[state],
+        health: state === 'error' ? 'bad' : state === 'streaming' ? 'ok' : ''
+      },
+      playback: {
+        text:
+          this._sink === 'missing'
+            ? SINK_UNAVAILABLE
+            : this._sink === 'off'
+              ? SINK_SHUT_DOWN
+              : PLAYER_WORDS[this._mode],
+        health:
+          this._sink === 'missing'
+            ? 'bad'
+            : this._sink === 'off'
+              ? ''
+              : this._mode === 'playing'
+                ? 'ok'
+                : ''
+      },
+      delivery: { text: this._capture || 'Unknown', health: '' }
     };
   }
 

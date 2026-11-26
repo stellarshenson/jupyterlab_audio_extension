@@ -17,8 +17,11 @@ const ROWS = {
   delivery: 'Captured audio goes to'
 } as const;
 
-/** The audio extension's state, one plain phrase per row of the Audio system card. */
-export type AudioSummary = Record<keyof typeof ROWS, string>;
+/** The audio extension's state: one row per card row, with its phrase and health colour. */
+export type AudioSummary = Record<
+  keyof typeof ROWS,
+  { text: string; health: 'ok' | 'bad' | '' }
+>;
 
 /**
  * The Audio Settings tab (ACC-CTRL-99): a page on the main-area background with the
@@ -49,13 +52,18 @@ export class AudioSettings extends Widget {
       'Microphone capture and playback. Changes save immediately.';
     head.append(title, subtitle);
 
+    const body = document.createElement('div');
+    body.className = 'jp-AudioSettings-body';
+
     // The board is a widget so the cards another extension adds are attached with the tab.
     const board = new Panel();
     board.addClass('jp-AudioSettings-board');
     const layout = new PanelLayout();
     this.layout = layout;
     layout.addWidget(board);
-    this.node.insertBefore(head, board.node);
+    // The page head and the body are the page's only children; the body scrolls under the head.
+    this.node.append(head, body);
+    body.appendChild(board.node);
 
     // The extension cards join the board before the plain DOM tiles, so the board layout's
     // single widget index stays correct; the core cards are then inserted before it.
@@ -100,23 +108,19 @@ export class AudioSettings extends Widget {
     this._settingDescription = document.createElement('p');
     this._settingDescription.className = 'jp-AudioSettings-settingDescription';
     settingText.append(this._settingTitle, this._settingDescription);
-    const switchLabel = document.createElement('label');
-    switchLabel.className = 'jp-AudioSettings-switch';
-    this._switch = document.createElement('input');
-    this._switch.type = 'checkbox';
-    this._switch.className = 'jp-AudioSettings-switchInput';
+    // The standard JupyterLab switch (jp-switch); the shipped theme CSS draws the track.
+    this._switch = document.createElement('button');
+    this._switch.className = 'jp-switch';
+    this._switch.setAttribute('role', 'switch');
+    this._switch.setAttribute('aria-checked', 'false');
+    this._switch.setAttribute('aria-label', 'Auto-connect on startup');
     this._switch.disabled = true;
-    this._switch.addEventListener('change', this._onToggle);
-    const track = document.createElement('span');
-    track.className = 'jp-AudioSettings-switchTrack';
-    const thumb = document.createElement('span');
-    thumb.className = 'jp-AudioSettings-switchThumb';
-    track.appendChild(thumb);
-    const switchText = document.createElement('span');
-    switchText.className = 'jp-AudioSettings-switchLabel';
-    switchText.textContent = 'Auto-connect on startup';
-    switchLabel.append(this._switch, track, switchText);
-    setting.append(settingText, switchLabel);
+    this._switch.addEventListener('click', this._onToggle);
+    const track = document.createElement('div');
+    track.className = 'jp-switch-track';
+    track.setAttribute('aria-hidden', 'true');
+    this._switch.appendChild(track);
+    setting.append(settingText, this._switch);
     captureBody.appendChild(setting);
     captureCard.appendChild(captureBody);
     board.node.insertBefore(captureCard, insert);
@@ -156,7 +160,7 @@ export class AudioSettings extends Widget {
     footer.className = 'jp-AudioSettings-footer';
     footer.textContent =
       'Raw values: Settings Editor > Audio Capture and Audio Settings Panel.';
-    this.node.appendChild(footer);
+    body.appendChild(footer);
 
     this._status.summaryChanged.connect(this._onSummary);
     this._status.disposed.connect(this._onStatusDisposed);
@@ -227,27 +231,32 @@ export class AudioSettings extends Widget {
     if (!this._settings) {
       return;
     }
-    this._switch.checked = this._settings.get('autoConnect').composite === true;
+    this._switch.setAttribute(
+      'aria-checked',
+      String(this._settings.get('autoConnect').composite === true)
+    );
     this._renderToolbar(this._settings);
   }
 
-  /** Toggling saves the setting; it starts no capture. */
+  /** Clicking saves the next value; it starts no capture. */
   private _onToggle = (): void => {
+    const next = this._switch.getAttribute('aria-checked') !== 'true';
+    this._switch.setAttribute('aria-checked', String(next));
     if (!this._settings) {
       return;
     }
-    void this._settings
-      .set('autoConnect', this._switch.checked)
-      .catch(reason => {
-        console.error(
-          'Failed to save jupyterlab_audio_extension settings.',
-          reason
+    void this._settings.set('autoConnect', next).catch(reason => {
+      console.error(
+        'Failed to save jupyterlab_audio_extension settings.',
+        reason
+      );
+      if (this._settings) {
+        this._switch.setAttribute(
+          'aria-checked',
+          String(this._settings.get('autoConnect').composite === true)
         );
-        if (this._settings) {
-          this._switch.checked =
-            this._settings.get('autoConnect').composite === true;
-        }
-      });
+      }
+    });
   };
 
   /** One read-only row per pill item, or the empty state. */
@@ -289,10 +298,20 @@ export class AudioSettings extends Widget {
   };
 
   private _writeSummary(summary: AudioSummary): void {
-    for (const [key, text] of Object.entries(summary)) {
+    for (const [key, entry] of Object.entries(summary)) {
       const value = this.node.querySelector(`[data-vc-summary="${key}"]`);
-      if (value && value.textContent !== text) {
-        value.textContent = text;
+      if (value) {
+        if (value.textContent !== entry.text) {
+          value.textContent = entry.text;
+        }
+        value.classList.toggle(
+          'jp-AudioSettings-value-ok',
+          entry.health === 'ok'
+        );
+        value.classList.toggle(
+          'jp-AudioSettings-value-bad',
+          entry.health === 'bad'
+        );
       }
     }
   }
@@ -307,7 +326,7 @@ export class AudioSettings extends Widget {
 
   private _status: VoiceStatus;
   private _settings: ISettingRegistry.ISettings | null = null;
-  private _switch: HTMLInputElement;
+  private _switch: HTMLButtonElement;
   private _settingTitle: HTMLDivElement;
   private _settingDescription: HTMLParagraphElement;
   private _toolbarList: HTMLDivElement;

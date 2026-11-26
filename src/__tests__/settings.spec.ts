@@ -5,7 +5,7 @@ import {
 
 import { ServerConnection } from '@jupyterlab/services';
 
-import { SettingRegistry } from '@jupyterlab/settingregistry';
+import { ISettingRegistry, SettingRegistry } from '@jupyterlab/settingregistry';
 
 import { CommandRegistry } from '@lumino/commands';
 
@@ -145,8 +145,19 @@ function row(name: string): string | null {
   );
 }
 
-function switchInput(): HTMLInputElement {
-  return root().querySelector('.jp-AudioSettings-switchInput')!;
+const OK = 'jp-AudioSettings-value-ok';
+const BAD = 'jp-AudioSettings-value-bad';
+
+/** The health classes one row of the Audio system card carries, or the empty string. */
+function health(name: string): string {
+  const value = root().querySelector(`[data-vc-summary="${name}"]`)!;
+  return [OK, BAD]
+    .filter(className => value.classList.contains(className))
+    .join(' ');
+}
+
+function switchInput(): HTMLButtonElement {
+  return root().querySelector('.jp-switch')!;
 }
 
 function settingDescription(): HTMLElement {
@@ -222,6 +233,25 @@ describe('AudioSettings tab board', () => {
     ).toContain(
       'Raw values: Settings Editor > Audio Capture and Audio Settings Panel.'
     );
+  });
+
+  it('ACC-CTRL-110-PAGE-CHROME: the page holds the head and the body, which holds the board and the footer', async () => {
+    await create();
+    const children = Array.from(root().children);
+
+    expect(children).toHaveLength(2);
+    expect(children[0].classList.contains('jp-AudioSettings-pageHead')).toBe(
+      true
+    );
+    expect(children[1].classList.contains('jp-AudioSettings-body')).toBe(true);
+    expect(children[0].querySelector('h1')!.textContent).toBe('Audio Settings');
+    expect(
+      children[0].querySelector('.jp-AudioSettings-subtitle')!.textContent
+    ).toBe('Microphone capture and playback. Changes save immediately.');
+    expect(children[1].querySelector('.jp-AudioSettings-board')).toBe(board());
+    expect(
+      children[1].querySelector('.jp-AudioSettings-footer')
+    ).not.toBeNull();
   });
 
   it('ACC-CTRL-99-TAB: the tab disposes with the status widget and stops following it', async () => {
@@ -343,6 +373,65 @@ describe('AudioSettings Audio system card', () => {
     expect(capture).toBe(FIFO);
     expect(row('delivery')).toBe('Unknown');
   });
+
+  it.each([
+    [
+      'a ready system',
+      IDLE,
+      { audioSystem: OK, microphone: '', playback: '', delivery: '' }
+    ],
+    [
+      'a playing file',
+      PLAYING,
+      { audioSystem: OK, microphone: '', playback: OK, delivery: '' }
+    ],
+    [
+      'a paused file',
+      { ...PLAYING, paused: true },
+      { audioSystem: OK, microphone: '', playback: '', delivery: '' }
+    ],
+    [
+      'a missing speaker sink',
+      { ...IDLE, sink: { state: 'missing' } },
+      { audioSystem: BAD, microphone: '', playback: BAD, delivery: '' }
+    ],
+    [
+      'a shut-down speaker sink',
+      { ...PLAYING, sink: { state: 'off' } },
+      { audioSystem: '', microphone: '', playback: '', delivery: '' }
+    ]
+  ])(
+    'ACC-CTRL-108-STATUS-COLOR: the card colours the rows for %s',
+    async (_, state, expected) => {
+      await create(state);
+
+      for (const [name, className] of Object.entries(expected)) {
+        expect(health(name)).toBe(className);
+      }
+    }
+  );
+
+  it('ACC-CTRL-108-STATUS-COLOR: the microphone row is plain idle and connecting, green streaming and red on error', async () => {
+    await create();
+    const turn = (state: AudioCaptureState, message = ''): void => {
+      model.state = state;
+      model.message = message;
+      model.stateChanged.emit(state);
+    };
+
+    turn('connecting');
+    expect(health('microphone')).toBe('');
+    turn('streaming');
+    expect(health('microphone')).toBe(OK);
+    turn('error', 'Microphone permission denied.');
+    expect(health('microphone')).toBe(BAD);
+    expect(row('microphone')).toBe('Microphone permission denied.');
+    turn('error');
+    expect(health('microphone')).toBe(BAD);
+    expect(row('microphone')).toBe('Error');
+    turn('idle');
+    expect(health('microphone')).toBe('');
+  });
 });
 
 describe('AudioSettings Capture card', () => {
@@ -412,31 +501,73 @@ describe('AudioSettings Capture card', () => {
 
   let releaseCards: () => void = () => undefined;
 
-  it('ACC-CTRL-107-AUTOCONNECT: the switch reads the setting, saves it and follows a later change', async () => {
+  it('ACC-CTRL-107-AUTOCONNECT: the standard switch starts disabled, reads the setting, saves a click and follows a later change', async () => {
     registries([]);
+    const load = settingRegistry.load.bind(settingRegistry);
+    let release: () => void = () => undefined;
+    jest.spyOn(settingRegistry, 'load').mockReturnValueOnce(
+      new Promise<ISettingRegistry.ISettings>(resolve => {
+        release = () => resolve(load(PLUGIN_ID));
+      })
+    );
     await create(IDLE, { registry: settingRegistry });
-    const settings = await settingRegistry.load(PLUGIN_ID);
+
+    // The switch is the standard JupyterLab one and waits, disabled, for the bind.
+    const button = switchInput();
+    expect(button.className).toBe('jp-switch');
+    expect(button.getAttribute('role')).toBe('switch');
+    expect(button.getAttribute('aria-checked')).toBe('false');
+    expect(button.getAttribute('aria-label')).toBe('Auto-connect on startup');
+    expect(button.disabled).toBe(true);
+    expect(
+      button.querySelector('.jp-switch-track')!.getAttribute('aria-hidden')
+    ).toBe('true');
+    expect(root().querySelector('.jp-switch-label')).toBeNull();
+
+    release();
+    await until(() => switchInput().disabled === false);
+    const settings = await load(PLUGIN_ID);
     await until(() =>
       settingDescription().textContent!.includes(
         'Start microphone capture automatically'
       )
     );
+    expect(switchInput().getAttribute('aria-label')).toBe(
+      'Auto-connect on startup'
+    );
+    expect(switchInput().getAttribute('aria-checked')).toBe('false');
 
-    expect(switchInput().disabled).toBe(false);
-    expect(switchInput().checked).toBe(false);
-    switchInput().checked = true;
-    switchInput().dispatchEvent(new Event('change'));
+    // A click paints the next value and saves it.
+    switchInput().click();
+    expect(switchInput().getAttribute('aria-checked')).toBe('true');
     await until(() => settings.get('autoConnect').composite === true);
     expect(settings.get('autoConnect').composite).toBe(true);
 
-    // A later change, as the Settings Editor makes it, updates the switch.
+    // A later change, as the Settings Editor makes it, repaints the switch.
     await settings.set('autoConnect', false);
-    await until(() => switchInput().checked === false);
-    expect(switchInput().checked).toBe(false);
+    await until(() => switchInput().getAttribute('aria-checked') === 'false');
+    expect(switchInput().getAttribute('aria-checked')).toBe('false');
 
     // The switch starts no capture now.
     expect(model.enable).not.toHaveBeenCalled();
     expect(model.toggle).not.toHaveBeenCalled();
+  });
+
+  it('ACC-CTRL-107-AUTOCONNECT: a refused save repaints the switch from the setting', async () => {
+    registries([]);
+    await create(IDLE, { registry: settingRegistry });
+    const settings = await settingRegistry.load(PLUGIN_ID);
+    await until(() => switchInput().disabled === false);
+
+    jest
+      .spyOn(settingRegistry, 'set')
+      .mockRejectedValueOnce(new Error('refused'));
+    switchInput().click();
+    expect(switchInput().getAttribute('aria-checked')).toBe('true');
+
+    await until(() => switchInput().getAttribute('aria-checked') === 'false');
+    expect(switchInput().getAttribute('aria-checked')).toBe('false');
+    expect(settings.get('autoConnect').composite).toBe(false);
   });
 
   it('ACC-CTRL-106-BOARD: the Status bar card lists each pill item or No items', async () => {
