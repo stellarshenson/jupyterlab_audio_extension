@@ -203,6 +203,12 @@ test('ACC-CTRL-99-GEAR: the gear opens one Audio Settings tab in the main area a
   );
   await autoConnect.click();
   await expect(autoConnect).toHaveAttribute('aria-checked', initial!);
+  // The switch paints no rectangle on hover: the track alone shows the control.
+  await autoConnect.hover();
+  const hoverBackground = await autoConnect.evaluate(
+    node => getComputedStyle(node).backgroundColor
+  );
+  expect(hoverBackground).toBe('rgba(0, 0, 0, 0)');
 
   // A second click focuses the same tab: switch away, then click the gear again.
   await page.evaluate(async () => {

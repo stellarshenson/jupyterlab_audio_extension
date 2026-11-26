@@ -307,6 +307,11 @@
   cursor: default;
 }
 
+/* The standard switch has no hover fill: the track alone shows the control. */
+.jp-AudioSettings .jp-switch:hover {
+  background-color: transparent;
+}
+
 /*
   The live microphone green of the active lamp and the streaming microphone, one per theme
   (ACC-CTRL-102-LIVECOLOR); another extension reads it without importing this package.

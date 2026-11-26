@@ -2,6 +2,12 @@
 
 <!-- <START NEW CHANGELOG ENTRY> -->
 
+## [1.0.53] - 2026-11-26
+
+### Fixed
+
+- Hovering the Capture card's Auto-connect switch paints no rectangle: the page clears JupyterLab's switch hover fill so only the track shows (DEF-PAGE-26-SWITCH-HOVER)
+
 ## [1.0.51] - 2026-11-26
 
 ### Added

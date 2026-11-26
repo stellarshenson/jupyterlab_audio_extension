@@ -286,3 +286,17 @@ The shipped skill an AI assistant reads to play sound in the browser and run the
   - log: 2026-11-24T18:51:39Z @kj root-cause recorded; reason: tmp/workflows/cli-scan/report.json records the route shipped while the CLI kept only install, validate, start and stop
   - log: 2026-11-24T18:51:43Z @kj overrides ACC-AGENT-45-SKILL removed - ACC-AGENT-45-SKILL was amended to the CLI-first skill, so the override recorded against the paplay-era skill is stale
   - log: 2026-11-24T19:20:41Z @kj closed: fixed
+
+## Audio Settings page `PAGE`
+
+The Audio Settings main-area tab, its cards and its controls
+
+- log: 2026-11-26T07:35:50Z @kj category created
+
+- [x] `DEF-PAGE-26-SWITCH-HOVER` **Hovering the Auto-connect switch paints a rectangle** - MINOR; hovering the switch paints a rectangular background behind it; the button keeps a transparent background so only the track shows
+  - evidence: gates.json: jlpm build:prod exit 0; Jest settings spec 26 of 26 tests passed (ACC-CTRL-107-AUTOCONNECT ran, 2 cases); lint exit 0 with 0 warnings and 0 errors; Galata run 1 29 passed, 1 failed (openSpeakerTab console-wait flake), 2 skipped of 32, confirmation run 30 passed, 0 failed, 2 skipped of 32; ACC-CTRL-99-GEAR hover assertion getComputedStyle backgroundColor rgba(0, 0, 0, 0) passed in both runs; log /home/lab/workspace/private/jupyterlab/jupyterlab_audio_extension/tmp/workflows/switch-hover/logs/gates-galata.log
+  - repro: open Audio Settings, hover the Capture card's Auto-connect switch; a rectangle appears behind the track
+  - test-tags: FUNCTIONAL
+  - root-cause: 2026-11-26T07:35:50Z @kj JupyterLab's switch.css sets .jp-switch:hover background-color to var(--jp-layout-color2); the page set no override
+  - log: 2026-11-26T07:35:50Z @kj added
+  - log: 2026-11-26T07:35:56Z @kj closed: fixed; reason: the evidence must cite every gate the fix was accepted on: build, Jest counts, lint, Galata counts and the run 1 flake, the hover assertion result
